@@ -75,6 +75,8 @@ the parity ledger must be updated with implemented features and remaining gaps b
 
 ## outstanding source parity
 
+native application interaction now includes workspace launching and bounded accessibility inspection/press/text operations, with a live master switch and mandatory per-call approval. voice activation uses on-device apple speech recognition, a configurable whole-word wake name, microphone/speech permissions, visible listening status and immediate stop controls. these do not provide screenshot-based control, speaker authentication, or provider voice synthesis. macos compilation and interactive permission behavior must be verified separately from portable tests.
+
 gemini wire format; key rotation and failover; signed reasoning blocks and model controls; model catalogs and pricing; embeddings and instant-memory injection; prompt-template variables; agent profiles, voices and looks; automatic titles and summary compaction; edit/regenerate/resend/fork; folders and file library; encrypted phone import/export; images and generated images; web search backends, page extraction and weather; charts, diagrams, math and interactive ui/questions; reminders, alarms, timers and notification actions; dictation, transcription and speech; mcp stdio/http, oauth, elicitation and dynamic tools; single-instance launch routing and deep links; translations and usage dashboards.
 
 these are absent features, not placeholders or silently successful mock implementations. the native app is not a full replacement until these are implemented and macos end-to-end verification passes.

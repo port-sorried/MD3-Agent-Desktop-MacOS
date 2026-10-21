@@ -15,6 +15,11 @@ struct InputBarView: View {
                 Button { importing = true } label: { Image(systemName: "paperclip") }
                     .help("attach text files").disabled(model.isRunning)
                 Text("return to send").font(.caption).foregroundStyle(.secondary)
+                if model.voice.isListening {
+                    Label("микрофон включен", systemImage: "mic.fill").font(.caption).foregroundStyle(.orange)
+                    Button("выкл. микрофон") { UserDefaults.standard.set(false, forKey: "voice.enabled"); model.voice.stop() }
+                        .font(.caption)
+                }
                 Spacer()
                 if model.isRunning {
                     Button { model.stop() } label: { Label("stop", systemImage: "stop.fill") }

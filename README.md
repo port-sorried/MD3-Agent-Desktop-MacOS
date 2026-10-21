@@ -79,7 +79,19 @@ remote endpoints require https. plaintext http is accepted only for literal loop
 
 ## permissions and security
 
-every tool has an off, ask, or auto policy. all non-shell tools default to ask; shell and python default to off. ask displays the tool name and complete arguments and requires an allow-once decision. settings are locked during a running response so a run uses one consistent policy snapshot.
+### application control
+
+enable `управление приложениями` in tools & security to expose native system tools to the agent. it is off by default. the agent can list running apps, open an installed app by bundle id, inspect its accessibility tree, press an inspected element, and replace text in an editable field. `запросить доступ` opens the macos accessibility permission prompt; enable MD3Agent in system settings, privacy & security, accessibility, then use `проверить`.
+
+every system tool requires an allow-once approval, including inspection and app launching, even if its policy is auto. the master switch is checked again at execution time, so it can revoke access during a running task. inspected element ids expire after 60 seconds and are invalidated after an action. password fields are excluded. inaccessible/custom-drawn interfaces may not expose usable controls; the app reports failure instead of pretending to click them. no screen recording or arbitrary applescript is used. granting accessibility access is powerful: ui text and typed content can reach the selected model and local run logs.
+
+### voice activation
+
+in the `голос` settings tab, choose a wake name and recognition language, then enable `откликаться на имя через микрофон`. grant microphone and speech-recognition permission when macos asks. say the name and command in one phrase, for example `агент открой заметки`. after a short pause, the command is submitted to the current conversation if the agent is idle and the draft is empty. recognition must support on-device processing for the selected language; otherwise the feature stays stopped with an error, without falling back to cloud audio processing.
+
+the microphone remains active while the mode is enabled and successfully listening, including when another application is foreground. its status appears in settings and an orange microphone indicator with an off button appears in the chat composer. disabling the toggle stops capture immediately; sleep and quitting also stop it. after sleep or a recognition error, use the reconnect button. recognition sessions rotate periodically to avoid retaining an unlimited transcript. only the command text is sent to the configured model, not ambient audio. wake recognition is not speaker authentication, so other people or speaker playback can trigger it. voice cannot approve tool requests. system interaction and voice activation have separate switches and both default to off.
+
+every tool has an off, ask, or auto policy. all non-shell tools default to ask; shell and python default to off. ask displays the tool name and complete arguments and requires an allow-once decision. a running agent uses a policy snapshot; the system-control master switch can additionally revoke native app-control access immediately.
 
 `run_command` and `run_python` execute as your user. they can access anything your user can access, including files outside the workspace and the network. **the working directory is not a sandbox.** the distribution deliberately disables app sandbox and does not invent a subprocess entitlement. system execution is incompatible with claiming that arbitrary code is isolated by app sandbox.
 

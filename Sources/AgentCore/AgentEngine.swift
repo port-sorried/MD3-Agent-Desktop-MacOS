@@ -12,13 +12,14 @@ public struct AgentEngine: Sendable {
     public init(storage: StorageService) { self.storage = storage }
 
     public func run(conversation: Conversation, preferences: AppPreferences, apiKey: String,
+                    systemHandler: (@Sendable (ToolCall) async throws -> String)? = nil,
                     approve: @escaping @Sendable (ToolCall) async -> Bool,
                     emit: @escaping @Sendable (AgentEvent) async -> Void) async throws {
         let context = AgentContext(messages: conversation.messages)
-        let registry = ToolRegistry(storage: storage)
+        let registry = ToolRegistry(storage: storage, systemHandler: preferences.systemControlEnabled == true ? systemHandler : nil)
         var saved = conversation
         let rounds = min(max(preferences.maxToolRounds, 1), 64)
-        let definitions = ToolRegistry.available(preferences.permissions)
+        let definitions = ToolRegistry.available(preferences.permissions, systemControlEnabled: preferences.systemControlEnabled == true)
         let schemaBytes = try JSONEncoder().encode(definitions).count
         for _ in 0..<rounds {
             try Task.checkCancellation()
@@ -72,8 +73,7 @@ public struct AgentEngine: Sendable {
                 do {
                     try Task.checkCancellation()
                     await emit(.toolStarted(call))
-                    let permission = preferences.permissions[call.name] ?? ToolRegistry.defaultPermission(for: call.name)
-                    let approved = permission == .ask ? await approve(call) : false
+                    let approved = ToolRegistry.needsApproval(call.name, permissions: preferences.permissions) ? await approve(call) : false
                     try Task.checkCancellation()
                     result = try await registry.execute(call, permissions: preferences.permissions, approved: approved)
                     if result.utf8.count > 65_536 { result = String(result.prefix(16_384)) + "\n[tool output truncated]" }

@@ -6,6 +6,10 @@ struct SettingsView: View {
     @State private var apiKey = ""
     @State private var keyStatus = ""
     @AppStorage("notch.enabled") private var notchEnabled = true
+    @AppStorage("voice.enabled") private var voiceEnabled = false
+    @AppStorage("voice.wakeName") private var wakeName = "агент"
+    @AppStorage("voice.locale") private var voiceLocale = "ru-RU"
+    @State private var accessibilityGranted = false
     var body: some View {
         TabView {
             Form {
@@ -45,6 +49,17 @@ struct SettingsView: View {
             }.tabItem { Label("model provider", systemImage: "network") }
 
             Form {
+                Toggle("управление приложениями", isOn: Binding(
+                    get: { model.preferences.systemControlEnabled == true },
+                    set: { model.preferences.systemControlEnabled = $0; model.systemAutomation.enabled = $0 }
+                ))
+                Text("каждое чтение интерфейса, открытие приложения, нажатие и ввод требуют подтверждения. парольные поля исключены.")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Text(accessibilityGranted ? "универсальный доступ разрешен" : "универсальный доступ не разрешен")
+                    Button("запросить доступ") { model.systemAutomation.requestAccessibility() }
+                    Button("проверить") { accessibilityGranted = model.systemAutomation.accessibilityGranted }
+                }.font(.caption)
                 Text("system commands run with your user account's access. the workspace is not a sandbox. auto permits repeated execution without approval.")
                     .foregroundStyle(Theme.error)
                 ForEach(ToolRegistry.definitions, id: \.name) { tool in
@@ -58,6 +73,24 @@ struct SettingsView: View {
             }.tabItem { Label("tools & security", systemImage: "lock.shield") }
 
             Form {
+                Toggle("откликаться на имя через микрофон", isOn: $voiceEnabled)
+                TextField("имя для вызова", text: $wakeName)
+                Picker("язык распознавания", selection: $voiceLocale) {
+                    Text("русский").tag("ru-RU")
+                    Text("english").tag("en-US")
+                }
+                Text(model.voice.status).foregroundStyle(model.voice.isListening ? Color.orange : Color.secondary)
+                if !model.voice.lastCommand.isEmpty { LabeledContent("последняя команда", value: model.voice.lastCommand) }
+                Button("повторить подключение") {
+                    Task { await model.configureVoice(enabled: voiceEnabled, name: wakeName, locale: voiceLocale) }
+                }
+                Text("пока режим включен, микрофон слушает локально. скажите имя и команду одной фразой. после паузы команда отправится выбранной модели. имя не является проверкой личности: голос из динамиков тоже может активировать агента. разрешения инструментов голосом не подтверждаются.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("аудио не отправляется в сеть. если локальное распознавание языка недоступно, режим не запустится. текст команды отправляется вашему провайдеру. после сна включите режим повторно.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }.tabItem { Label("голос", systemImage: "mic") }
+
+            Form {
                 Picker("appearance", selection: $model.preferences.appearance) {
                     Text("system").tag("system"); Text("light").tag("light"); Text("dark").tag("dark")
                 }
@@ -66,7 +99,7 @@ struct SettingsView: View {
             }.tabItem { Label("appearance", systemImage: "paintpalette") }
         }
         .formStyle(.grouped).padding().frame(width: 680, height: 610)
-        .disabled(model.isRunning)
+        .onAppear { accessibilityGranted = model.systemAutomation.accessibilityGranted }
         .onChange(of: model.preferences) { _, _ in Task { await model.savePreferences() } }
     }
     private func account() throws -> String {

@@ -10,6 +10,7 @@ struct MD3AgentApp: App {
                 .preferredColorScheme(Theme.scheme(model.preferences.appearance))
                 .task { await model.initialize() }
                 .modifier(NotchIntegration(model: model))
+                .modifier(VoiceIntegration(model: model))
         }
         .defaultSize(width: 1180, height: 780)
         .commands {
@@ -36,6 +37,6 @@ private struct MenuBarContent: View {
         if model.isRunning { Button("stop response") { model.stop() } }
         Divider()
         SettingsLink()
-        Button("quit") { model.stop(); NSApp.terminate(nil) }.keyboardShortcut("q")
+        Button("quit") { model.voice.stop(); model.stop(); NSApp.terminate(nil) }.keyboardShortcut("q")
     }
 }

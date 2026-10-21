@@ -14,8 +14,8 @@
     <key>NSHighResolutionCapable</key><true/>
     <key>NSSupportsAutomaticTermination</key><false/>
     <key>NSSupportsSuddenTermination</key><false/>
-    <key>NSMicrophoneUsageDescription</key><string>Record speech when you explicitly start dictation.</string>
-    <key>NSSpeechRecognitionUsageDescription</key><string>Transcribe speech when you explicitly start dictation.</string>
+    <key>NSMicrophoneUsageDescription</key><string>Listen for your configured assistant name and voice commands only while voice activation is enabled in settings.</string>
+    <key>NSSpeechRecognitionUsageDescription</key><string>Recognize your assistant name and commands on device while voice activation is enabled.</string>
     <key>NSAppTransportSecurity</key>
     <dict><key>NSAllowsLocalNetworking</key><true/></dict>
 </dict>

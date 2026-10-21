@@ -23,6 +23,8 @@ final class AppModel {
     private var execution: Task<Void, Never>?
     private var approvalContinuation: CheckedContinuation<Bool, Never>?
     private var initialized = false
+    let systemAutomation = SystemAutomation()
+    let voice = VoiceActivation()
 
     var selectedConversation: Conversation? { conversations.first { $0.id == selectedID } }
 
@@ -34,6 +36,7 @@ final class AppModel {
             storage = database
             conversations = try await database.conversations()
             preferences = try await database.preferences()
+            systemAutomation.enabled = preferences.systemControlEnabled == true
             selectedID = conversations.first?.id
         } catch { errorMessage = error.localizedDescription }
     }
@@ -81,6 +84,10 @@ final class AppModel {
                 let account = "\(configuration.provider.kind.rawValue):\(endpoint.absoluteString)"
                 let apiKey = try KeychainService.read(account: account)
                 try await AgentEngine(storage: storage).run(conversation: conversation, preferences: configuration, apiKey: apiKey,
+                    systemHandler: { [weak self] call in
+                        guard let self else { throw AgentError.denied("application closed") }
+                        return try await self.systemAutomation.execute(call)
+                    },
                     approve: { [weak self] call in await self?.requestApproval(call) ?? false },
                     emit: { [weak self] event in await self?.receive(event, conversationID: conversation.id) })
                 runOutcome = .completed
@@ -95,6 +102,18 @@ final class AppModel {
     }
 
     func stop() { execution?.cancel(); resolveApproval(false) }
+
+    func configureVoice(enabled: Bool, name: String, locale: String) async {
+        await voice.configure(enabled: enabled, name: name, locale: locale) { [weak self] command in
+            guard let self else { return }
+            guard !isRunning, draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                errorMessage = "голосовая команда не отправлена: дождитесь ответа или очистите черновик"
+                return
+            }
+            draft = command
+            send()
+        }
+    }
 
     private func receive(_ event: AgentEvent, conversationID: UUID) {
         switch event {

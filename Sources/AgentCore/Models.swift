@@ -108,6 +108,8 @@ public struct AppPreferences: Codable, Sendable, Equatable {
     public var showMenuBar = true
     public var enableHotkey = true
     public var maxToolRounds = 16
+    // Optional so settings saved by earlier versions decode with control disabled.
+    public var systemControlEnabled: Bool? = false
     public init() {}
 }
 
