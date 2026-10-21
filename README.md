@@ -14,6 +14,7 @@ this migration is **not yet at full functional parity**. the portable core has b
 - workspace file operations, lexical memory search, and saved-chat search tools.
 - native split-view history/chat/inspector layout, lazy chat rows, inline markdown, fenced code copying, text-file attachments, and settings.
 - menu bar controls and a control-option-space global shortcut without accessibility permission.
+- a macos notch task panel with elapsed time, hover details, active-tool status, allow-once/deny controls, and stop/open-chat actions.
 - semantic system colors mapped to material color roles, system accent, light/dark appearance, and reduced-motion-aware scrolling.
 
 the package builds arm64 directly for apple silicon. this removes the java runtime from the native target, but no memory or performance benchmark has been run. intel builds are configurable; the release workflow currently publishes arm64 only.
@@ -82,6 +83,16 @@ workspace file tools reject absolute paths, traversal, and resolved symlinks esc
 conversations, memory, tool output, and preferences are stored in `~/Library/Application Support/MD3Agent/agent.sqlite`; imported files and command output files live in its `workspace` directory. the directory is private to your user, but the database is not encrypted. tool run logs can contain sensitive command output. provider credentials are stored separately in keychain.
 
 context pruning removes complete older user turns without splitting assistant tool requests from their results. the token counter uses a conservative utf-8-byte estimate, not a model tokenizer. removed turns remain in the database. model-generated summarization and semantic memory retrieval are not yet ported.
+
+## task panel at the notch
+
+the native macos target shows a black task panel at the top of the display, inspired by the interaction in [ClaudeNotch](https://github.com/CraftStick/ClaudeNotch). this is an independent implementation for this application's own agent, not a claude-code hook integration. it does not copy the reference project's character or sprites.
+
+the compact panel leaves the physical camera housing clear and shows status and elapsed time on either side. hover to see the submitted task, current tool, token counts, and stop/open-chat controls. a pending tool approval expands the panel automatically and offers allow-once and deny using the same approval continuation as the main window. completion, failure, and cancellation have distinct statuses. the timer stops when the run finishes.
+
+the panel prefers a connected display with a physical notch and otherwise uses a virtual notch centered at the top of the main display. display geometry is recalculated when screens change. it uses a nonactivating appkit panel so hovering and approving do not take keyboard focus from the current application. no screen recording, automation, or accessibility permission is requested. turn it off with `показывать задачу у челки` in general settings. task titles and arguments are visible on the display, so disable the panel before sharing the screen if those are sensitive.
+
+26 portable tests pass after this addition, including three geometry tests for physical notches, offset external displays, and small display bounds. swift syntax parsing passes for the new macos files. visual placement, full-screen behavior, first-click controls, and swiftui/appkit typechecking still require macos verification.
 
 ## remaining parity
 

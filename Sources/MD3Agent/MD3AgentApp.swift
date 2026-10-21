@@ -9,6 +9,7 @@ struct MD3AgentApp: App {
             MainWindowView(model: model)
                 .preferredColorScheme(Theme.scheme(model.preferences.appearance))
                 .task { await model.initialize() }
+                .modifier(NotchIntegration(model: model))
         }
         .defaultSize(width: 1180, height: 780)
         .commands {

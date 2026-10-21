@@ -5,10 +5,12 @@ struct SettingsView: View {
     @Bindable var model: AppModel
     @State private var apiKey = ""
     @State private var keyStatus = ""
+    @AppStorage("notch.enabled") private var notchEnabled = true
     var body: some View {
         TabView {
             Form {
                 Toggle("show menu bar item", isOn: $model.preferences.showMenuBar)
+                Toggle("показывать задачу у челки", isOn: $notchEnabled)
                 Toggle("global shortcut: control option space", isOn: $model.preferences.enableHotkey)
                 Stepper("tool round limit: \(model.preferences.maxToolRounds)", value: $model.preferences.maxToolRounds, in: 1...64)
                 LabeledContent("system prompt") {

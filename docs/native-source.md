@@ -399,6 +399,7 @@ this migration is **not yet at full functional parity**. the portable core has b
 - workspace file operations, lexical memory search, and saved-chat search tools.
 - native split-view history/chat/inspector layout, lazy chat rows, inline markdown, fenced code copying, text-file attachments, and settings.
 - menu bar controls and a control-option-space global shortcut without accessibility permission.
+- a macos notch task panel with elapsed time, hover details, active-tool status, allow-once/deny controls, and stop/open-chat actions.
 - semantic system colors mapped to material color roles, system accent, light/dark appearance, and reduced-motion-aware scrolling.
 
 the package builds arm64 directly for apple silicon. this removes the java runtime from the native target, but no memory or performance benchmark has been run. intel builds are configurable; the release workflow currently publishes arm64 only.
@@ -467,6 +468,16 @@ workspace file tools reject absolute paths, traversal, and resolved symlinks esc
 conversations, memory, tool output, and preferences are stored in `~/Library/Application Support/MD3Agent/agent.sqlite`; imported files and command output files live in its `workspace` directory. the directory is private to your user, but the database is not encrypted. tool run logs can contain sensitive command output. provider credentials are stored separately in keychain.
 
 context pruning removes complete older user turns without splitting assistant tool requests from their results. the token counter uses a conservative utf-8-byte estimate, not a model tokenizer. removed turns remain in the database. model-generated summarization and semantic memory retrieval are not yet ported.
+
+## task panel at the notch
+
+the native macos target shows a black task panel at the top of the display, inspired by the interaction in [ClaudeNotch](https://github.com/CraftStick/ClaudeNotch). this is an independent implementation for this application's own agent, not a claude-code hook integration. it does not copy the reference project's character or sprites.
+
+the compact panel leaves the physical camera housing clear and shows status and elapsed time on either side. hover to see the submitted task, current tool, token counts, and stop/open-chat controls. a pending tool approval expands the panel automatically and offers allow-once and deny using the same approval continuation as the main window. completion, failure, and cancellation have distinct statuses. the timer stops when the run finishes.
+
+the panel prefers a connected display with a physical notch and otherwise uses a virtual notch centered at the top of the main display. display geometry is recalculated when screens change. it uses a nonactivating appkit panel so hovering and approving do not take keyboard focus from the current application. no screen recording, automation, or accessibility permission is requested. turn it off with `показывать задачу у челки` in general settings. task titles and arguments are visible on the display, so disable the panel before sharing the screen if those are sensitive.
+
+26 portable tests pass after this addition, including three geometry tests for physical notches, offset external displays, and small display bounds. swift syntax parsing passes for the new macos files. visual placement, full-screen behavior, first-click controls, and swiftui/appkit typechecking still require macos verification.
 
 ## remaining parity
 
@@ -1064,6 +1075,36 @@ public enum CompletionEvent: Sendable, Equatable {
 }
 ````
 
+## `Sources/AgentCore/NotchLayout.swift`
+
+````swift
+import Foundation
+
+public struct NotchLayout: Sendable, Equatable {
+    public let frame: CGRect
+    public let cameraWidth: CGFloat
+    public let headerHeight: CGFloat
+
+    public init(screen: CGRect, topInset: CGFloat, leftArea: CGRect?, rightArea: CGRect?, expanded: Bool) {
+        let gap: CGFloat
+        let center: CGFloat
+        if topInset > 0, let leftArea, let rightArea, rightArea.minX > leftArea.maxX {
+            gap = rightArea.minX - leftArea.maxX
+            center = (leftArea.maxX + rightArea.minX) / 2
+        } else {
+            gap = 0
+            center = screen.midX
+        }
+        cameraWidth = gap
+        headerHeight = max(32, topInset)
+        let width = min(screen.width, max(expanded ? 440 : 300, gap + 160))
+        let height = min(screen.height, headerHeight + (expanded ? 260 : 0))
+        let x = min(max(center - width / 2, screen.minX), screen.maxX - width)
+        frame = CGRect(x: x, y: screen.maxY - height, width: width, height: height)
+    }
+}
+````
+
 ## `Sources/AgentCore/ProcessRunner.swift`
 
 ````swift
@@ -1593,6 +1634,11 @@ import Observation
 
 @MainActor @Observable
 final class AppModel {
+    enum RunOutcome { case idle, completed, failed, stopped }
+    var runOutcome: RunOutcome = .idle
+    var runTitle: String?
+    var runStartedAt: Date?
+    var runFinishedAt: Date?
     var conversations: [Conversation] = []
     var selectedID: UUID?
     var preferences = AppPreferences()
@@ -1655,8 +1701,10 @@ final class AppModel {
         let conversation = conversations[index]
         let configuration = preferences
         draft = ""; streamedText = ""; errorMessage = nil; isRunning = true
+        runTitle = String(submittedText.prefix(160)); runStartedAt = Date(); runFinishedAt = nil
+        runOutcome = .idle; usage = TokenUsage(); activeTool = nil
         execution = Task {
-            defer { isRunning = false; execution = nil; streamedText = ""; activeTool = nil; resolveApproval(false) }
+            defer { isRunning = false; runFinishedAt = Date(); execution = nil; streamedText = ""; activeTool = nil; resolveApproval(false) }
             do {
                 try await storage.save(conversation)
                 let endpoint = try configuration.provider.validatedURL()
@@ -1665,9 +1713,11 @@ final class AppModel {
                 try await AgentEngine(storage: storage).run(conversation: conversation, preferences: configuration, apiKey: apiKey,
                     approve: { [weak self] call in await self?.requestApproval(call) ?? false },
                     emit: { [weak self] event in await self?.receive(event, conversationID: conversation.id) })
+                runOutcome = .completed
             } catch is CancellationError {
+                runOutcome = .stopped
                 errorMessage = "response stopped"
-            } catch { errorMessage = error.localizedDescription }
+            } catch { runOutcome = .failed; errorMessage = error.localizedDescription }
             do {
                 conversations = try await storage.conversations()
             } catch { errorMessage = "could not reload conversations: \(error.localizedDescription)" }
@@ -1678,12 +1728,13 @@ final class AppModel {
 
     private func receive(_ event: AgentEvent, conversationID: UUID) {
         switch event {
-        case .draft(let text): streamedText = text
+        case .draft(let text): streamedText = text; activeTool = nil
         case .message(let message):
             if let index = conversations.firstIndex(where: { $0.id == conversationID }) {
                 conversations[index].messages.append(message)
             }
             streamedText = ""
+            if message.role == .tool { activeTool = nil }
         case .usage(let received):
             if received.input > 0 { usage.input = received.input }
             if received.output > 0 { usage.output = received.output }
@@ -1976,6 +2027,7 @@ struct MD3AgentApp: App {
             MainWindowView(model: model)
                 .preferredColorScheme(Theme.scheme(model.preferences.appearance))
                 .task { await model.initialize() }
+                .modifier(NotchIntegration(model: model))
         }
         .defaultSize(width: 1180, height: 780)
         .commands {
@@ -2103,6 +2155,215 @@ struct MainWindowView: View {
 }
 ````
 
+## `Sources/MD3Agent/NotchPanelController.swift`
+
+````swift
+import AppKit
+import SwiftUI
+import AgentCore
+
+@MainActor
+final class NotchPanelController: NSWindowController {
+    private var model: AppModel?
+    private var enabled = false
+    private var hovered = false
+    private var openConversation: (@MainActor () -> Void)?
+
+    init() {
+        let panel = TaskNotchPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.isMovable = false
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        super.init(window: panel)
+        NotificationCenter.default.addObserver(self, selector: #selector(screenChanged),
+                                               name: NSApplication.didChangeScreenParametersNotification, object: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
+
+    func update(model: AppModel, enabled: Bool, openConversation: @escaping @MainActor () -> Void) {
+        self.model = model
+        self.enabled = enabled
+        self.openConversation = openConversation
+        if !enabled { hovered = false; window?.orderOut(nil); return }
+        layout()
+        window?.orderFrontRegardless()
+    }
+
+    @objc private func screenChanged() { if enabled { layout() } }
+
+    private func layout() {
+        guard let model, let window,
+              let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main ?? NSScreen.screens.first else { return }
+        let expanded = hovered || model.pendingApproval != nil
+        let geometry = NotchLayout(screen: screen.frame, topInset: screen.safeAreaInsets.top,
+                                   leftArea: screen.auxiliaryTopLeftArea, rightArea: screen.auxiliaryTopRightArea, expanded: expanded)
+        window.setFrame(geometry.frame, display: true)
+        let content = NotchTaskView(model: model, expanded: expanded, cameraWidth: geometry.cameraWidth,
+                                    headerHeight: geometry.headerHeight, openConversation: { [weak self] in self?.openConversation?() },
+                                    hoverChanged: { [weak self] hovering in
+            guard let self, hovered != hovering else { return }
+            hovered = hovering
+            layout()
+        })
+        if let hosting = window.contentView as? NotchHostingView<NotchTaskView> {
+            hosting.rootView = content
+        } else { window.contentView = NotchHostingView(rootView: content) }
+    }
+}
+
+private final class TaskNotchPanel: NSPanel {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+}
+
+private final class NotchHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
+struct NotchIntegration: ViewModifier {
+    let model: AppModel
+    @AppStorage("notch.enabled") private var enabled = true
+    @State private var controller = NotchPanelController()
+    @Environment(\.openWindow) private var openWindow
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: enabled, initial: true) { _, _ in update() }
+            .onChange(of: model.isRunning) { _, _ in update() }
+            .onChange(of: model.pendingApproval?.id) { _, _ in update() }
+    }
+
+    private func update() {
+        controller.update(model: model, enabled: enabled) {
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: "main")
+        }
+    }
+}
+````
+
+## `Sources/MD3Agent/NotchTaskView.swift`
+
+````swift
+import SwiftUI
+import AgentCore
+
+struct NotchTaskView: View {
+    let model: AppModel
+    let expanded: Bool
+    let cameraWidth: CGFloat
+    let headerHeight: CGFloat
+    let openConversation: @MainActor () -> Void
+    let hoverChanged: @MainActor (Bool) -> Void
+
+    private var tint: Color {
+        if model.pendingApproval != nil { return .orange }
+        if model.runOutcome == .failed { return .red }
+        return model.isRunning ? .mint : .white.opacity(0.7)
+    }
+
+    private var status: String {
+        if model.pendingApproval != nil { return "нужно разрешение" }
+        if model.isRunning { return model.activeTool == nil ? "отвечает" : "выполняет инструмент" }
+        switch model.runOutcome {
+        case .completed: return "готово"
+        case .failed: return "ошибка"
+        case .stopped: return "остановлено"
+        case .idle: return "готов к задаче"
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                Button(action: openConversation) {
+                    HStack(spacing: 7) {
+                        Image(systemName: model.pendingApproval != nil ? "hand.raised.fill" : "sparkles").foregroundStyle(tint)
+                        if cameraWidth == 0 { Text("MD3").fontWeight(.semibold) }
+                    }.frame(maxWidth: .infinity, minHeight: headerHeight)
+                }.help("открыть текущую задачу")
+                if cameraWidth > 0 { Color.clear.frame(width: cameraWidth, height: headerHeight).allowsHitTesting(false) }
+                HStack(spacing: 6) {
+                    Circle().fill(tint).frame(width: 6, height: 6)
+                    if let started = model.runStartedAt {
+                        if model.isRunning { Text(started, style: .timer).monospacedDigit() }
+                        else { Text(duration).monospacedDigit() }
+                    } else { Text("готов") }
+                }.font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .frame(maxWidth: .infinity, minHeight: headerHeight)
+            }
+            .padding(.horizontal, 12)
+
+            if expanded {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Label(status, systemImage: statusIcon).foregroundStyle(tint)
+                        Spacer()
+                        if model.isRunning { ProgressView().controlSize(.small).tint(.white) }
+                    }.font(.system(size: 12, weight: .semibold))
+                    Text(model.runTitle ?? "новая задача")
+                        .font(.system(size: 16, weight: .semibold)).lineLimit(2)
+                    if let call = model.pendingApproval {
+                        Text(call.name).font(.system(size: 12, design: .monospaced)).foregroundStyle(.orange)
+                        ScrollView {
+                            Text(call.arguments).font(.system(size: 11, design: .monospaced))
+                                .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                        }.frame(maxHeight: 70)
+                        HStack {
+                            Button("отклонить") { model.resolveApproval(false) }
+                            Button("разрешить один раз") { model.resolveApproval(true) }.tint(.orange)
+                        }.buttonStyle(.bordered)
+                    } else {
+                        Text(model.errorMessage ?? model.activeTool ?? (model.isRunning ? "генерирует ответ" : "можно вернуться в чат"))
+                            .font(.system(size: 12)).foregroundStyle(.white.opacity(0.7)).lineLimit(3)
+                        HStack {
+                            Text("токены: \(model.usage.input) / \(model.usage.output)")
+                                .font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.5))
+                            Spacer()
+                            if model.isRunning { Button("стоп", role: .destructive) { model.stop() }.buttonStyle(.bordered) }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    Button("открыть чат", action: openConversation).buttonStyle(.plain).foregroundStyle(.mint)
+                }.padding(18).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+        }
+        .foregroundStyle(.white)
+        .background(.black, in: UnevenRoundedRectangle(bottomLeadingRadius: expanded ? 24 : 14, bottomTrailingRadius: expanded ? 24 : 14))
+        .overlay(alignment: .bottom) { Rectangle().fill(tint.opacity(model.isRunning ? 0.8 : 0.2)).frame(height: 2).padding(.horizontal, 24) }
+        .contentShape(Rectangle())
+        .onHover(perform: hoverChanged)
+        .environment(\.colorScheme, .dark)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("статус задачи: \(status)")
+    }
+
+    private var statusIcon: String {
+        if model.pendingApproval != nil { return "lock.shield" }
+        if model.isRunning { return "waveform.path" }
+        switch model.runOutcome {
+        case .completed: return "checkmark.circle"
+        case .failed: return "exclamationmark.triangle"
+        case .stopped: return "stop.circle"
+        case .idle: return "circle.dotted"
+        }
+    }
+
+    private var duration: String {
+        let seconds = max(0, Int((model.runFinishedAt ?? model.runStartedAt ?? Date()).timeIntervalSince(model.runStartedAt ?? Date())))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+}
+````
+
 ## `Sources/MD3Agent/SettingsView.swift`
 
 ````swift
@@ -2113,10 +2374,12 @@ struct SettingsView: View {
     @Bindable var model: AppModel
     @State private var apiKey = ""
     @State private var keyStatus = ""
+    @AppStorage("notch.enabled") private var notchEnabled = true
     var body: some View {
         TabView {
             Form {
                 Toggle("show menu bar item", isOn: $model.preferences.showMenuBar)
+                Toggle("показывать задачу у челки", isOn: $notchEnabled)
                 Toggle("global shortcut: control option space", isOn: $model.preferences.enableHotkey)
                 Stepper("tool round limit: \(model.preferences.maxToolRounds)", value: $model.preferences.maxToolRounds, in: 1...64)
                 LabeledContent("system prompt") {
@@ -2214,6 +2477,39 @@ enum Theme {
     static func scheme(_ preference: String) -> ColorScheme? {
         switch preference { case "light": .light; case "dark": .dark; default: nil }
     }
+}
+````
+
+## `Tests/AgentCoreTests/NotchLayoutTests.swift`
+
+````swift
+import Foundation
+import Testing
+@testable import AgentCore
+
+@Test func notchContentLeavesCameraGap() {
+    let geometry = NotchLayout(screen: CGRect(x: 0, y: 0, width: 1512, height: 982), topInset: 32,
+                               leftArea: CGRect(x: 0, y: 950, width: 656, height: 32),
+                               rightArea: CGRect(x: 856, y: 950, width: 656, height: 32), expanded: false)
+    #expect(geometry.cameraWidth == 200)
+    #expect(geometry.frame.midX == 756)
+    #expect(geometry.frame.maxY == 982)
+    #expect(geometry.frame.width >= geometry.cameraWidth + 160)
+}
+
+@Test func virtualNotchWorksOnOffsetExternalDisplay() {
+    let screen = CGRect(x: -1920, y: 120, width: 1920, height: 1080)
+    let geometry = NotchLayout(screen: screen, topInset: 0, leftArea: nil, rightArea: nil, expanded: true)
+    #expect(geometry.cameraWidth == 0)
+    #expect(geometry.frame.midX == screen.midX)
+    #expect(geometry.frame.maxY == screen.maxY)
+    #expect(geometry.frame.height == 292)
+}
+
+@Test func notchFrameFitsSmallDisplays() {
+    let screen = CGRect(x: 100, y: -400, width: 320, height: 240)
+    let geometry = NotchLayout(screen: screen, topInset: 0, leftArea: nil, rightArea: nil, expanded: true)
+    #expect(screen.contains(geometry.frame))
 }
 ````
 
@@ -2507,6 +2803,7 @@ the parity ledger must be updated with implemented features and remaining gaps b
 | markdown | inline formatting and fenced code copy | no full block, math, image, chart or diagram parity |
 | attachments | text picker and file-url drop, private workspace copy | no multimodal, pasteboard file import, or persistent attachment metadata |
 | native shell integration | menu bar, carbon hotkey, text clipboard | macos verification required |
+| notch task panel | nonactivating panel, camera gap, hover details, timer, task/tool status, approvals and stop/open-chat controls | 3 geometry tests pass; macos window behavior and framework typechecking unverified |
 | ci/release | macos build/test/coverage, developer-id signing/notarization/zip release | shell syntax and plist parsing pass; workflows not executed |
 
 ## outstanding source parity
@@ -2520,6 +2817,8 @@ these are absent features, not placeholders or silently successful mock implemen
 on 2026-10-21, the official `swift:6.0.3` container compiled the portable package in swift 6 language mode and ran 23 swift testing tests with coverage enabled, all passing. sqlite headers and the shared library were mounted from the host. the container warned that no sqlite pkg-config file was present; module-map/header linking still succeeded. an additional standalone compiled verifier passed 24 checks before the final edge-case additions.
 
 all native sources and tests passed the swift frontend syntax parser before the final documentation edits. `bash -n scripts/package-macos.sh` and python plist parsing passed. no macos framework typecheck, live provider request, github workflow, signing, notarization, or ui test was executed. those are release blockers, not claimed successes.
+
+after adding the macos notch interface, the portable suite passes 26 tests. the notch uses the application's existing approval flow and does not read external agent sessions or install hooks. its geometry uses appkit screen safe-area and auxiliary-area information; the geometry calculation alone is platform-independent so it can be tested without a display. this does not introduce a linux application or linux ui.
 ````
 
 ## `scripts/VerifyPortable.swift`

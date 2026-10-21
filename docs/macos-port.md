@@ -69,6 +69,7 @@ the parity ledger must be updated with implemented features and remaining gaps b
 | markdown | inline formatting and fenced code copy | no full block, math, image, chart or diagram parity |
 | attachments | text picker and file-url drop, private workspace copy | no multimodal, pasteboard file import, or persistent attachment metadata |
 | native shell integration | menu bar, carbon hotkey, text clipboard | macos verification required |
+| notch task panel | nonactivating panel, camera gap, hover details, timer, task/tool status, approvals and stop/open-chat controls | 3 geometry tests pass; macos window behavior and framework typechecking unverified |
 | ci/release | macos build/test/coverage, developer-id signing/notarization/zip release | shell syntax and plist parsing pass; workflows not executed |
 
 ## outstanding source parity
@@ -82,3 +83,5 @@ these are absent features, not placeholders or silently successful mock implemen
 on 2026-10-21, the official `swift:6.0.3` container compiled the portable package in swift 6 language mode and ran 23 swift testing tests with coverage enabled, all passing. sqlite headers and the shared library were mounted from the host. the container warned that no sqlite pkg-config file was present; module-map/header linking still succeeded. an additional standalone compiled verifier passed 24 checks before the final edge-case additions.
 
 all native sources and tests passed the swift frontend syntax parser before the final documentation edits. `bash -n scripts/package-macos.sh` and python plist parsing passed. no macos framework typecheck, live provider request, github workflow, signing, notarization, or ui test was executed. those are release blockers, not claimed successes.
+
+after adding the macos notch interface, the portable suite passes 26 tests. the notch uses the application's existing approval flow and does not read external agent sessions or install hooks. its geometry uses appkit screen safe-area and auxiliary-area information; the geometry calculation alone is platform-independent so it can be tested without a display. this does not introduce a linux application or linux ui.

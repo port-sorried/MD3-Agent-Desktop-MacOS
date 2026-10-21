@@ -4,6 +4,11 @@ import Observation
 
 @MainActor @Observable
 final class AppModel {
+    enum RunOutcome { case idle, completed, failed, stopped }
+    var runOutcome: RunOutcome = .idle
+    var runTitle: String?
+    var runStartedAt: Date?
+    var runFinishedAt: Date?
     var conversations: [Conversation] = []
     var selectedID: UUID?
     var preferences = AppPreferences()
@@ -66,8 +71,10 @@ final class AppModel {
         let conversation = conversations[index]
         let configuration = preferences
         draft = ""; streamedText = ""; errorMessage = nil; isRunning = true
+        runTitle = String(submittedText.prefix(160)); runStartedAt = Date(); runFinishedAt = nil
+        runOutcome = .idle; usage = TokenUsage(); activeTool = nil
         execution = Task {
-            defer { isRunning = false; execution = nil; streamedText = ""; activeTool = nil; resolveApproval(false) }
+            defer { isRunning = false; runFinishedAt = Date(); execution = nil; streamedText = ""; activeTool = nil; resolveApproval(false) }
             do {
                 try await storage.save(conversation)
                 let endpoint = try configuration.provider.validatedURL()
@@ -76,9 +83,11 @@ final class AppModel {
                 try await AgentEngine(storage: storage).run(conversation: conversation, preferences: configuration, apiKey: apiKey,
                     approve: { [weak self] call in await self?.requestApproval(call) ?? false },
                     emit: { [weak self] event in await self?.receive(event, conversationID: conversation.id) })
+                runOutcome = .completed
             } catch is CancellationError {
+                runOutcome = .stopped
                 errorMessage = "response stopped"
-            } catch { errorMessage = error.localizedDescription }
+            } catch { runOutcome = .failed; errorMessage = error.localizedDescription }
             do {
                 conversations = try await storage.conversations()
             } catch { errorMessage = "could not reload conversations: \(error.localizedDescription)" }
@@ -89,12 +98,13 @@ final class AppModel {
 
     private func receive(_ event: AgentEvent, conversationID: UUID) {
         switch event {
-        case .draft(let text): streamedText = text
+        case .draft(let text): streamedText = text; activeTool = nil
         case .message(let message):
             if let index = conversations.firstIndex(where: { $0.id == conversationID }) {
                 conversations[index].messages.append(message)
             }
             streamedText = ""
+            if message.role == .tool { activeTool = nil }
         case .usage(let received):
             if received.input > 0 { usage.input = received.input }
             if received.output > 0 { usage.output = received.output }
