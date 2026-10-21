@@ -342,6 +342,7 @@ jobs:
     <key>CFBundleName</key><string>MD3Agent</string>
     <key>CFBundleDisplayName</key><string>MD3Agent</string>
     <key>CFBundleExecutable</key><string>MD3Agent</string>
+    <key>CFBundleIconFile</key><string>MD3Agent.icns</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleVersion</key><string>1</string>
@@ -3079,6 +3080,18 @@ mkdir -p "$application/Contents/MacOS" "$application/Contents/Resources"
 install -m 755 "$binary_directory/MD3Agent" "$application/Contents/MacOS/MD3Agent"
 install -m 644 Info.plist "$application/Contents/Info.plist"
 install -m 644 LICENSE "$application/Contents/Resources/LICENSE"
+icon_source="app/src/main/resources/icons/md3-agent.png"
+icon_directory="$(mktemp -d "${TMPDIR:-/tmp}/md3agent-icon.XXXXXX")"
+trap 'rm -rf "$icon_directory"' EXIT
+iconset="$icon_directory/MD3Agent.iconset"
+mkdir -p "$iconset"
+for size in 16 32 128 256 512; do
+    sips -z "$size" "$size" "$icon_source" --out "$iconset/icon_${size}x${size}.png" > /dev/null
+    retina_size=$((size * 2))
+    sips -z "$retina_size" "$retina_size" "$icon_source" --out "$iconset/icon_${size}x${size}@2x.png" > /dev/null
+done
+iconutil -c icns "$iconset" -o "$application/Contents/Resources/MD3Agent.icns"
+test -s "$application/Contents/Resources/MD3Agent.icns"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$application/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER:-1}" "$application/Contents/Info.plist"
 
