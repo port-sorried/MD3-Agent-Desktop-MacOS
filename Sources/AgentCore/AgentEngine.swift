@@ -51,6 +51,11 @@ public struct AgentEngine: Sendable {
                 throw error
             }
             if ["length", "max_tokens"].contains(finishReason ?? "") {
+                if !text.isEmpty {
+                    let partial = ChatMessage(role: .assistant, content: text + "\n\n[output token limit reached]")
+                    saved.messages.append(partial); saved.updatedAt = Date()
+                    try await storage.save(saved); await emit(.message(partial))
+                }
                 throw AgentError.limit("model reached its output limit; increase output tokens or request a shorter response")
             }
             let toolCalls = try calls.completed()
@@ -73,7 +78,7 @@ public struct AgentEngine: Sendable {
                     result = try await registry.execute(call, permissions: preferences.permissions, approved: approved)
                     if result.utf8.count > 65_536 { result = String(result.prefix(16_384)) + "\n[tool output truncated]" }
                 } catch { result = "tool failed: \(error.localizedDescription)" }
-                let message = ChatMessage(role: .tool, content: result, toolCallID: call.id)
+                let message = ChatMessage(role: .tool, content: result, toolCallID: call.id, toolName: call.name)
                 await context.append(message); saved.messages.append(message)
                 try await storage.appendLog(RunLog(conversationID: saved.id, tool: call.name, outcome: String(result.prefix(4096))))
                 await emit(.message(message))

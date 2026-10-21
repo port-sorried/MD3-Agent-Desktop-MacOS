@@ -80,10 +80,11 @@ public struct ChatMessage: Codable, Sendable, Equatable, Identifiable {
     public var content: String
     public var toolCalls: [ToolCall]
     public var toolCallID: String?
+    public var toolName: String?
     public var createdAt: Date
-    public init(role: Role, content: String, toolCalls: [ToolCall] = [], toolCallID: String? = nil) {
+    public init(role: Role, content: String, toolCalls: [ToolCall] = [], toolCallID: String? = nil, toolName: String? = nil) {
         id = UUID(); self.role = role; self.content = content
-        self.toolCalls = toolCalls; self.toolCallID = toolCallID; createdAt = Date()
+        self.toolCalls = toolCalls; self.toolCallID = toolCallID; self.toolName = toolName; createdAt = Date()
     }
 }
 

@@ -64,6 +64,7 @@ struct SettingsView: View {
             }.tabItem { Label("appearance", systemImage: "paintpalette") }
         }
         .formStyle(.grouped).padding().frame(width: 680, height: 610)
+        .disabled(model.isRunning)
         .onChange(of: model.preferences) { _, _ in Task { await model.savePreferences() } }
     }
     private func account() throws -> String {

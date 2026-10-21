@@ -116,6 +116,7 @@ public struct LLMClient: Sendable {
             let turns: [JSONValue] = try messages.map { message in
                 var fields: [String: JSONValue] = ["role": .string(message.role.rawValue), "content": .string(message.content)]
                 if let id = message.toolCallID { fields["tool_call_id"] = .string(id) }
+                if configuration.kind == .ollama, let name = message.toolName { fields["tool_name"] = .string(name) }
                 if !message.toolCalls.isEmpty {
                     fields["tool_calls"] = .array(try message.toolCalls.map { call in
                         .object(["id": .string(call.id), "type": .string("function"), "function": .object([
