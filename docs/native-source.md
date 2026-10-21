@@ -1079,6 +1079,9 @@ public enum CompletionEvent: Sendable, Equatable {
 
 ````swift
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 public struct NotchLayout: Sendable, Equatable {
     public let frame: CGRect
@@ -2484,6 +2487,9 @@ enum Theme {
 
 ````swift
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 import Testing
 @testable import AgentCore
 
