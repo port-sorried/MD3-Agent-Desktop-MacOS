@@ -71,6 +71,7 @@ the parity ledger must be updated with implemented features and remaining gaps b
 | native shell integration | menu bar, carbon hotkey, text clipboard | macos verification required |
 | notch task panel | nonactivating panel, camera gap, hover details, timer, task/tool status, approvals and stop/open-chat controls | 3 geometry tests pass; macos window behavior and framework typechecking unverified |
 | ci/release | macos build/test/coverage, developer-id signing/notarization/zip release | shell syntax and plist parsing pass; workflows not executed |
+| installer image | compressed dmg with app, applications shortcut, instructions and sha256; signed/notarized image in tagged release | shell/yaml syntax checked locally; hdiutil execution requires macos ci |
 
 ## outstanding source parity
 

@@ -48,17 +48,21 @@ jobs:
             "$test_binary" > coverage.lcov
       - name: package smoke check
         run: bash scripts/package-macos.sh
+      - name: create installer disk image
+        run: bash scripts/create-dmg.sh
       - name: upload coverage
         uses: actions/upload-artifact@v4
         with:
           name: native-coverage
           path: coverage.lcov
           if-no-files-found: error
-      - name: upload application
+      - name: upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: MD3Agent-macos-arm64
-          path: dist/MD3Agent.app
+          name: MD3Agent-installer-macos-arm64
+          path: |
+            dist/*.dmg
+            dist/*.dmg.sha256
           if-no-files-found: error
 ````
 
@@ -291,6 +295,22 @@ jobs:
           spctl --assess --type execute --verbose=2 dist/MD3Agent.app
           ditto -c -k --keepParent dist/MD3Agent.app "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip"
           shasum -a 256 "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip" > "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip.sha256"
+      - name: create and notarize installer disk image
+        env:
+          VERSION: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${VERSION#v}"
+          VERSION="$version" bash scripts/create-dmg.sh
+          image="dist/MD3Agent-${version}-macos-arm64.dmg"
+          xcrun notarytool submit "$image" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple "$image"
+          xcrun stapler validate "$image"
+          hdiutil verify "$image"
+          shasum -a 256 "$image" > "$image.sha256"
       - name: publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -298,6 +318,8 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "$GITHUB_REF_NAME" \
+            "dist/MD3Agent-${GITHUB_REF_NAME#v}-macos-arm64.dmg" \
+            "dist/MD3Agent-${GITHUB_REF_NAME#v}-macos-arm64.dmg.sha256" \
             "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip" \
             "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip.sha256" \
             --verify-tag --generate-notes --title "MD3Agent $GITHUB_REF_NAME"
@@ -404,6 +426,12 @@ this migration is **not yet at full functional parity**. the portable core has b
 
 the package builds arm64 directly for apple silicon. this removes the java runtime from the native target, but no memory or performance benchmark has been run. intel builds are configurable; the release workflow currently publishes arm64 only.
 
+## install from a disk image
+
+download `MD3Agent-installer-macos-arm64` from a successful native macos build in github actions and extract the artifact zip. open the `.dmg` inside, drag `MD3Agent.app` onto the `Applications` shortcut, eject the image, and launch the app from applications. the artifact also includes a sha256 checksum. `native-coverage` is only a test report, not an installer.
+
+ci development images are ad-hoc signed and are not notarized. macos may block first launch; only for a build you trust, use system settings, privacy & security, open anyway. tagged releases additionally sign and notarize the image when the required apple credentials are configured. a `.dmg` does not by itself bypass gatekeeper or install privileged services.
+
 ## prerequisites
 
 - macos 14 or newer.
@@ -435,6 +463,7 @@ create a locally ad-hoc-signed app bundle:
 
 ```bash
 bash scripts/package-macos.sh
+bash scripts/create-dmg.sh
 open dist/MD3Agent.app
 ```
 
@@ -489,7 +518,7 @@ macos build, live-provider integration, ui behavior, keychain prompts, global ho
 
 ## ci and releases
 
-`build-and-test.yml` resolves the package, builds debug and release, runs swift tests with coverage, exports lcov, and packages an ad-hoc-signed application on macos.
+`build-and-test.yml` resolves the package, builds debug and release, runs swift tests with coverage, exports lcov, and packages an ad-hoc-signed application inside a compressed `.dmg` with an applications shortcut and checksum on macos.
 
 `release.yml` runs for `v*` tags. it requires a protected `release` environment and these secrets:
 
@@ -2811,6 +2840,7 @@ the parity ledger must be updated with implemented features and remaining gaps b
 | native shell integration | menu bar, carbon hotkey, text clipboard | macos verification required |
 | notch task panel | nonactivating panel, camera gap, hover details, timer, task/tool status, approvals and stop/open-chat controls | 3 geometry tests pass; macos window behavior and framework typechecking unverified |
 | ci/release | macos build/test/coverage, developer-id signing/notarization/zip release | shell syntax and plist parsing pass; workflows not executed |
+| installer image | compressed dmg with app, applications shortcut, instructions and sha256; signed/notarized image in tagged release | shell/yaml syntax checked locally; hdiutil execution requires macos ci |
 
 ## outstanding source parity
 
@@ -2924,6 +2954,62 @@ struct VerifyPortable {
 }
 ````
 
+## `scripts/create-dmg.sh`
+
+````bash
+#!/bin/bash
+set -euo pipefail
+
+application="${APPLICATION_PATH:-dist/MD3Agent.app}"
+destination="${OUTPUT_DIRECTORY:-dist}"
+version="${VERSION:-0.1.0}"
+architecture="${ARCHITECTURE:-arm64}"
+identity="${SIGNING_IDENTITY:--}"
+
+if [[ "$(uname -s)" != Darwin ]]; then
+    printf '%s\n' 'macos is required to create the installer image' >&2
+    exit 1
+fi
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
+    printf '%s\n' 'VERSION must be a semantic version' >&2
+    exit 1
+fi
+if [[ "$architecture" != arm64 && "$architecture" != x86_64 ]]; then
+    printf '%s\n' 'ARCHITECTURE must be arm64 or x86_64' >&2
+    exit 1
+fi
+if [[ ! -x "$application/Contents/MacOS/MD3Agent" ]]; then
+    printf '%s\n' 'build the application with scripts/package-macos.sh first' >&2
+    exit 1
+fi
+
+codesign --verify --strict --verbose=2 "$application"
+staging="$(mktemp -d "${TMPDIR:-/tmp}/md3agent-dmg.XXXXXX")"
+trap 'rm -rf "$staging"' EXIT
+mkdir -p "$destination"
+ditto "$application" "$staging/MD3Agent.app"
+ln -s /Applications "$staging/Applications"
+printf '%s\n' \
+    'install MD3Agent' \
+    '' \
+    'drag MD3Agent.app onto Applications, then open it from Applications.' \
+    'requires macOS 14 or later. arm64 builds require Apple Silicon.' \
+    '' \
+    'development builds are ad-hoc signed, not notarized by Apple.' \
+    'if macOS blocks a trusted development build, use System Settings > Privacy & Security > Open Anyway.' \
+    > "$staging/Read Me.txt"
+
+image="$destination/MD3Agent-${version}-macos-${architecture}.dmg"
+hdiutil create -volname MD3Agent -srcfolder "$staging" -format UDZO -ov "$image"
+if [[ "$identity" != - ]]; then
+    codesign --force --timestamp --sign "$identity" "$image"
+    codesign --verify --verbose=2 "$image"
+fi
+hdiutil verify "$image"
+shasum -a 256 "$image" > "$image.sha256"
+printf '%s\n' "$image"
+````
+
 ## `scripts/export-native-source.py`
 
 ````python
@@ -2935,7 +3021,7 @@ from pathlib import Path
 def main() -> None:
     root = Path(__file__).resolve().parents[1]
     explicit = ["Package.swift", "Info.plist", "MD3Agent.entitlements", "README.md",
-                "docs/macos-port.md", "scripts/package-macos.sh",
+                "docs/macos-port.md", "scripts/package-macos.sh", "scripts/create-dmg.sh",
                 "scripts/VerifyPortable.swift", "scripts/export-native-source.py"]
     paths = [root / name for name in explicit]
     for directory in ["Sources", "Tests", ".github/workflows"]:

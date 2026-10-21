@@ -75,6 +75,22 @@ jobs:
           spctl --assess --type execute --verbose=2 dist/MD3Agent.app
           ditto -c -k --keepParent dist/MD3Agent.app "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip"
           shasum -a 256 "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip" > "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip.sha256"
+      - name: create and notarize installer disk image
+        env:
+          VERSION: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${VERSION#v}"
+          VERSION="$version" bash scripts/create-dmg.sh
+          image="dist/MD3Agent-${version}-macos-arm64.dmg"
+          xcrun notarytool submit "$image" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple "$image"
+          xcrun stapler validate "$image"
+          hdiutil verify "$image"
+          shasum -a 256 "$image" > "$image.sha256"
       - name: publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -82,6 +98,8 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "$GITHUB_REF_NAME" \
+            "dist/MD3Agent-${GITHUB_REF_NAME#v}-macos-arm64.dmg" \
+            "dist/MD3Agent-${GITHUB_REF_NAME#v}-macos-arm64.dmg.sha256" \
             "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip" \
             "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip.sha256" \
             --verify-tag --generate-notes --title "MD3Agent $GITHUB_REF_NAME"

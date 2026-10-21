@@ -41,15 +41,19 @@ jobs:
             "$test_binary" > coverage.lcov
       - name: package smoke check
         run: bash scripts/package-macos.sh
+      - name: create installer disk image
+        run: bash scripts/create-dmg.sh
       - name: upload coverage
         uses: actions/upload-artifact@v4
         with:
           name: native-coverage
           path: coverage.lcov
           if-no-files-found: error
-      - name: upload application
+      - name: upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: MD3Agent-macos-arm64
-          path: dist/MD3Agent.app
+          name: MD3Agent-installer-macos-arm64
+          path: |
+            dist/*.dmg
+            dist/*.dmg.sha256
           if-no-files-found: error

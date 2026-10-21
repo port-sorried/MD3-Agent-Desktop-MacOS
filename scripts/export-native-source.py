@@ -6,7 +6,7 @@ from pathlib import Path
 def main() -> None:
     root = Path(__file__).resolve().parents[1]
     explicit = ["Package.swift", "Info.plist", "MD3Agent.entitlements", "README.md",
-                "docs/macos-port.md", "scripts/package-macos.sh",
+                "docs/macos-port.md", "scripts/package-macos.sh", "scripts/create-dmg.sh",
                 "scripts/VerifyPortable.swift", "scripts/export-native-source.py"]
     paths = [root / name for name in explicit]
     for directory in ["Sources", "Tests", ".github/workflows"]:

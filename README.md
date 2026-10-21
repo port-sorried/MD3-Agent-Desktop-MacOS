@@ -19,6 +19,12 @@ this migration is **not yet at full functional parity**. the portable core has b
 
 the package builds arm64 directly for apple silicon. this removes the java runtime from the native target, but no memory or performance benchmark has been run. intel builds are configurable; the release workflow currently publishes arm64 only.
 
+## install from a disk image
+
+download `MD3Agent-installer-macos-arm64` from a successful native macos build in github actions and extract the artifact zip. open the `.dmg` inside, drag `MD3Agent.app` onto the `Applications` shortcut, eject the image, and launch the app from applications. the artifact also includes a sha256 checksum. `native-coverage` is only a test report, not an installer.
+
+ci development images are ad-hoc signed and are not notarized. macos may block first launch; only for a build you trust, use system settings, privacy & security, open anyway. tagged releases additionally sign and notarize the image when the required apple credentials are configured. a `.dmg` does not by itself bypass gatekeeper or install privileged services.
+
 ## prerequisites
 
 - macos 14 or newer.
@@ -50,6 +56,7 @@ create a locally ad-hoc-signed app bundle:
 
 ```bash
 bash scripts/package-macos.sh
+bash scripts/create-dmg.sh
 open dist/MD3Agent.app
 ```
 
@@ -104,7 +111,7 @@ macos build, live-provider integration, ui behavior, keychain prompts, global ho
 
 ## ci and releases
 
-`build-and-test.yml` resolves the package, builds debug and release, runs swift tests with coverage, exports lcov, and packages an ad-hoc-signed application on macos.
+`build-and-test.yml` resolves the package, builds debug and release, runs swift tests with coverage, exports lcov, and packages an ad-hoc-signed application inside a compressed `.dmg` with an applications shortcut and checksum on macos.
 
 `release.yml` runs for `v*` tags. it requires a protected `release` environment and these secrets:
 
