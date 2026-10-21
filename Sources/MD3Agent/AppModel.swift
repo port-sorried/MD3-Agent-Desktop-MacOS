@@ -56,9 +56,10 @@ final class AppModel {
 
     func send() {
         guard !isRunning, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let storage else { return }
+        let submittedText = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         if selectedID == nil { newConversation() }
         guard let index = conversations.firstIndex(where: { $0.id == selectedID }) else { return }
-        let user = ChatMessage(role: .user, content: draft.trimmingCharacters(in: .whitespacesAndNewlines))
+        let user = ChatMessage(role: .user, content: submittedText)
         conversations[index].messages.append(user)
         if conversations[index].messages.count == 1 { conversations[index].title = String(user.content.prefix(60)) }
         conversations[index].updatedAt = Date()

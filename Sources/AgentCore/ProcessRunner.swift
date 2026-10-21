@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#else
+import Glibc
+#endif
 
 public struct ProcessResult: Codable, Sendable {
     public var exitCode: Int32
@@ -64,7 +68,7 @@ public enum ProcessRunner {
                 func drain(_ fd: Int32, into captured: inout Data) {
                     // Limit work per poll as well as retained bytes, even for a noisy child.
                     for _ in 0..<16 {
-                        let count = Darwin.read(fd, &buffer, buffer.count)
+                        let count = read(fd, &buffer, buffer.count)
                         if count <= 0 { break }
                         let room = max(0, maximumOutputBytes - captured.count)
                         captured.append(contentsOf: buffer.prefix(min(count, room)))
@@ -79,7 +83,7 @@ public enum ProcessRunner {
                         stopTime = now
                         process.terminate()
                     }
-                    if let stopTime, now - stopTime >= 1 { _ = Darwin.kill(process.processIdentifier, SIGKILL) }
+                    if let stopTime, now - stopTime >= 1 { _ = kill(process.processIdentifier, SIGKILL) }
                     usleep(10_000)
                 }
                 process.waitUntilExit()

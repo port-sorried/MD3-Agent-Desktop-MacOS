@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import AgentCore
 
 struct MainWindowView: View {

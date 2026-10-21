@@ -18,16 +18,18 @@ public struct AgentEngine: Sendable {
         let registry = ToolRegistry(storage: storage)
         var saved = conversation
         let rounds = min(max(preferences.maxToolRounds, 1), 64)
+        let definitions = ToolRegistry.available(preferences.permissions)
+        let schemaBytes = try JSONEncoder().encode(definitions).count
         for _ in 0..<rounds {
             try Task.checkCancellation()
             let messages = try await context.window(systemPrompt: preferences.systemPrompt, contextTokens: preferences.provider.contextTokens,
-                                                    reservedTokens: preferences.provider.outputTokens + 2048)
+                                                    reservedTokens: preferences.provider.outputTokens + schemaBytes + 1024)
             var text = ""
             var calls = ToolCallAccumulator()
             var finishReason: String?
             do {
                 for try await event in LLMClient().stream(configuration: preferences.provider, apiKey: apiKey, messages: messages,
-                                                        tools: ToolRegistry.available(preferences.permissions)) {
+                                                        tools: definitions) {
                     try Task.checkCancellation()
                     switch event {
                     case .text(let fragment):

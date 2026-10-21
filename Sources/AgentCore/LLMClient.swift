@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public struct ToolDefinition: Codable, Sendable, Equatable {
     public var name: String
@@ -12,6 +15,7 @@ public struct ToolDefinition: Codable, Sendable, Equatable {
 public struct LLMClient: Sendable {
     public init() {}
 
+    #if os(macOS)
     public func stream(configuration: ProviderConfiguration, apiKey: String, messages: [ChatMessage], tools: [ToolDefinition]) -> AsyncThrowingStream<CompletionEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
@@ -57,6 +61,7 @@ public struct LLMClient: Sendable {
             continuation.onTermination = { @Sendable _ in task.cancel() }
         }
     }
+    #endif
 
     public static func request(configuration: ProviderConfiguration, apiKey: String, messages: [ChatMessage], tools: [ToolDefinition]) throws -> URLRequest {
         let endpoint = try configuration.validatedURL()
