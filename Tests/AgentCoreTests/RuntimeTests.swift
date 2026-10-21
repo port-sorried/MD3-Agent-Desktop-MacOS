@@ -89,3 +89,25 @@ import Testing
     let timeout = try await ProcessRunner.run(executable: URL(fileURLWithPath: "/bin/sleep"), arguments: ["10"], directory: root, timeout: 0.05)
     #expect(timeout.timedOut)
 }
+
+@Test func processCancellationStopsWaitingForChild() async throws {
+    let task = Task {
+        try await ProcessRunner.run(executable: URL(fileURLWithPath: "/bin/sleep"), arguments: ["30"],
+                                    directory: FileManager.default.temporaryDirectory)
+    }
+    try await Task.sleep(for: .milliseconds(50))
+    task.cancel()
+    await #expect(throws: CancellationError.self) { try await task.value }
+}
+
+@Test func symlinksCannotEscapeWorkspace() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let storage = try StorageService(directory: root)
+    let link = storage.workspace.appendingPathComponent("escape")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: root.appendingPathComponent("agent.sqlite"))
+    let registry = ToolRegistry(storage: storage)
+    await #expect(throws: (any Error).self) {
+        try await registry.execute(ToolCall(id: "symlink", name: "read_file", arguments: "{\"path\":\"escape\"}"), permissions: [:], approved: true)
+    }
+}

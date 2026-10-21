@@ -181,7 +181,8 @@ public struct CompletionDecoder: Sendable {
                 let block = root["content_block"]
                 if block["type"].string == "tool_use" {
                     anthropicToolBlocks.insert(index)
-                    events.append(.toolDelta(index: index, id: block["id"].string, name: block["name"].string, arguments: ""))
+                    let initialInput = block["input"].object.isEmpty ? "" : try block["input"].encoded()
+                    events.append(.toolDelta(index: index, id: block["id"].string, name: block["name"].string, arguments: initialInput))
                 } else if let text = block["text"].string, !text.isEmpty { events.append(.text(text)) }
             case "content_block_delta":
                 if let text = root["delta"]["text"].string { events.append(.text(text)) }

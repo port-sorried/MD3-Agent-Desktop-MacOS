@@ -9,6 +9,7 @@ public struct StreamParser: Sendable {
     private var eventLines: [String] = []
     private var eventBytes = 0
     private var previousWasCR = false
+    private var firstLine = true
 
     public init(format: Format = .sse, maximumBytes: Int = 1_048_576) {
         self.format = format; self.maximumBytes = maximumBytes
@@ -39,8 +40,12 @@ public struct StreamParser: Sendable {
     }
 
     private mutating func consumeLine(into payloads: inout [String]) throws {
-        guard let line = String(data: lineBytes, encoding: .utf8) else {
+        guard var line = String(data: lineBytes, encoding: .utf8) else {
             throw AgentError.protocolViolation("invalid utf-8 in stream")
+        }
+        if firstLine {
+            if line.hasPrefix("\u{feff}") { line.removeFirst() }
+            firstLine = false
         }
         lineBytes.removeAll(keepingCapacity: true)
         switch format {
@@ -77,7 +82,12 @@ public struct ToolCallAccumulator: Sendable {
         calls[index] = call
     }
     public func completed() throws -> [ToolCall] {
-        let ordered = calls.keys.sorted().compactMap { calls[$0] }
+        let ordered = calls.keys.sorted().compactMap { calls[$0] }.map { call in
+            var completed = call
+            // Anthropic can finish an empty-input tool without a JSON delta.
+            if completed.arguments.isEmpty { completed.arguments = "{}" }
+            return completed
+        }
         guard Set(ordered.map(\.id)).count == ordered.count else {
             throw AgentError.protocolViolation("duplicate tool call ids")
         }

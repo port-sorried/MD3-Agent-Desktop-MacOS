@@ -18,6 +18,17 @@ import Testing
     #expect(try parser.finish() == ["trailing"])
 }
 
+@Test func initialByteOrderMarkIsIgnored() throws {
+    var parser = StreamParser()
+    #expect(try parser.append(Data("\u{feff}data: first\n\n".utf8)) == ["first"])
+}
+
+@Test func emptyToolInputNeedsNoArgumentDelta() throws {
+    var accumulator = ToolCallAccumulator()
+    try accumulator.append(index: 0, id: "empty", name: "list_files", arguments: "")
+    #expect(try accumulator.completed().first?.arguments == "{}")
+}
+
 @Test func jsonLinesSupportsFinalUnterminatedLine() throws {
     var parser = StreamParser(format: .jsonLines)
     #expect(try parser.append(Data("{\"a\":1}\n\n{\"b\":2}".utf8)) == ["{\"a\":1}"])
