@@ -1,0 +1,93 @@
+name: native macos release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: native-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-15
+    timeout-minutes: 45
+    environment: release
+    env:
+      CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+      CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+      SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: select xcode 16.4
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+      - name: validate signing configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CERTIFICATE_BASE64 CERTIFICATE_PASSWORD KEYCHAIN_PASSWORD SIGNING_IDENTITY APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              printf 'missing release secret: %s\n' "$name" >&2
+              exit 1
+            fi
+          done
+      - name: import developer id certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          certificate="$RUNNER_TEMP/signing.p12"
+          keychain="$RUNNER_TEMP/md3agent-signing.keychain-db"
+          printf '%s' "$CERTIFICATE_BASE64" | base64 --decode > "$certificate"
+          chmod 600 "$certificate"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security import "$certificate" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$KEYCHAIN_PASSWORD" "$keychain"
+          security list-keychains -d user -s "$keychain" "$HOME/Library/Keychains/login.keychain-db"
+      - name: resolve and test
+        run: swift package resolve && swift test
+      - name: build signed arm64 app
+        env:
+          VERSION: ${{ github.ref_name }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        shell: bash
+        run: VERSION="${VERSION#v}" bash scripts/package-macos.sh
+      - name: notarize and staple
+        shell: bash
+        run: |
+          set -euo pipefail
+          ditto -c -k --keepParent dist/MD3Agent.app "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple dist/MD3Agent.app
+          xcrun stapler validate dist/MD3Agent.app
+          spctl --assess --type execute --verbose=2 dist/MD3Agent.app
+          ditto -c -k --keepParent dist/MD3Agent.app "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip"
+          shasum -a 256 "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip" > "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip.sha256"
+      - name: publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip" \
+            "dist/MD3Agent-${GITHUB_REF_NAME}-macos-arm64.zip.sha256" \
+            --verify-tag --generate-notes --title "MD3Agent $GITHUB_REF_NAME"
+      - name: remove signing material
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "$RUNNER_TEMP/md3agent-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/signing.p12" "$RUNNER_TEMP/notarize.zip"

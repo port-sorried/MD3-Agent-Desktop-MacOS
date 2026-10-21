@@ -1,0 +1,55 @@
+name: native macos build and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: select xcode 16.4
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+      - name: compiler version
+        run: swift --version
+      - name: resolve package
+        run: swift package resolve
+      - name: debug build
+        run: swift build -c debug
+      - name: test with coverage
+        run: swift test --enable-code-coverage
+      - name: release build
+        run: swift build -c release
+      - name: export coverage
+        shell: bash
+        run: |
+          binary_directory="$(swift build --show-bin-path)"
+          test_binary="$binary_directory/MD3AgentPackageTests.xctest/Contents/MacOS/MD3AgentPackageTests"
+          xcrun llvm-cov export -format=lcov \
+            -instr-profile "$binary_directory/codecov/default.profdata" \
+            "$test_binary" > coverage.lcov
+      - name: package smoke check
+        run: bash scripts/package-macos.sh
+      - name: upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-coverage
+          path: coverage.lcov
+          if-no-files-found: error
+      - name: upload application
+        uses: actions/upload-artifact@v4
+        with:
+          name: MD3Agent-macos-arm64
+          path: dist/MD3Agent.app
+          if-no-files-found: error
