@@ -2623,7 +2623,8 @@ final class SystemAutomation {
 
     var accessibilityGranted: Bool { AXIsProcessTrusted() }
     func requestAccessibility() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        // The SDK exposes the key as a mutable C global; use its fixed value.
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
     }
 
