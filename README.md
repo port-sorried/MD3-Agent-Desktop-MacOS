@@ -1,86 +1,121 @@
-# MD3 Agent Desktop
+# MD3Agent for macOS
 
-The desktop version (Linux) of [MD3 Agent](https://github.com/huecoder/MD3-Agent): an AI assistant with tools, MCP servers and
-long-term memory in a Material 3 Expressive interface. It runs on any Linux distribution, on X11 and Wayland, in any
-desktop (GNOME, KDE, XFCE, Cinnamon, Hyprland, Sway and others).
+a native swift 6 macos implementation alongside the original kotlin desktop application. the native target uses swiftui, appkit, foundation networking, sqlite, and the security framework. it does not embed a jvm or web renderer.
 
-## What it does
+this migration is **not yet at full functional parity**. the portable core has been compiled and tested on linux. the macos application has not been compiled or run in the implementation environment. do not treat the presence of a release workflow as proof of a working signed release.
 
-- Chat with any OpenAI-compatible endpoint, Anthropic or Gemini; presets for OpenAI, Anthropic, Google, DeepSeek and
-  OpenRouter; several keys per provider, rotated.
-- Agents with their own prompt, look and voice; session compaction with a context meter; usage statistics.
-- Tools, each Off, Ask or Auto:
-  - web search and reading pages (DuckDuckGo, SearXNG, Brave, Jina, Firecrawl), weather;
-  - `run_command` and `run_python` in **System** mode (your own bash and python3) or **Sandbox** mode
-    (bubblewrap: only the agent's workspace is visible, network by switch); Python uses the agent's own venv, so
-    `pip install` works;
-  - files in the workspace or your home folder, showing files and pictures in the chat;
-  - reminders, alarms and timers: desktop notifications, and a window with a chime, Stop and Snooze;
-  - memory, other chats, charts, diagrams, quick replies, questions;
-  - any number of MCP servers (HTTP with OAuth through a loopback redirect, or stdio).
-- Attach files with the system file picker, by dragging them onto the chat, or by pasting files and pictures with Ctrl+V.
-- Dictation (any Whisper-compatible provider) and spoken replies (provider voices, or speech-dispatcher).
-- A quick-question window over everything (`md3-agent --overlay`, or a global shortcut where the desktop supports
-  the GlobalShortcuts portal).
-- Import from the phone: on Android, Settings → Export for PC; here, Settings → Import from phone.
+## native capabilities
 
-Not included: the camera and controlling the screen or other apps, which the phone version has.
+- openai-compatible chat completions, anthropic messages, native ollama chat, and custom openai-compatible endpoints.
+- incremental sse and newline-delimited json decoding, indexed tool-call assembly, cancellation, output limits, and provider usage reporting.
+- actor-isolated conversation context and sqlite storage for conversations, preferences, memories, and tool run logs.
+- credentials in macos keychain, scoped to the exact provider endpoint.
+- bounded subprocess output, timeout controls, a minimal child environment, and per-invocation tool approval.
+- workspace file operations, lexical memory search, and saved-chat search tools.
+- native split-view history/chat/inspector layout, lazy chat rows, inline markdown, fenced code copying, text-file attachments, and settings.
+- menu bar controls and a control-option-space global shortcut without accessibility permission.
+- semantic system colors mapped to material color roles, system accent, light/dark appearance, and reduced-motion-aware scrolling.
 
-## Install
+the package builds arm64 directly for apple silicon. this removes the java runtime from the native target, but no memory or performance benchmark has been run. intel builds are configurable; the release workflow currently publishes arm64 only.
 
-| Distribution | Package | How |
-|---|---|---|
-| Debian, Ubuntu, Mint, Pop!_OS | `md3-agent_<version>_amd64.deb` | `sudo apt install ./md3-agent_*.deb` |
-| Fedora, openSUSE | `md3-agent-<version>.x86_64.rpm` | `sudo dnf install ./md3-agent-*.rpm` / `sudo zypper install ./md3-agent-*.rpm` |
-| Arch and derivatives | `PKGBUILD` in this repository | `makepkg -si` |
-| Anything else with glibc | `MD3_Agent-<version>-x86_64.AppImage` | `chmod +x` and run |
+## prerequisites
 
-The deb, rpm and AppImage bring their own Java runtime. The Arch package uses the system Java (21 or newer).
-How the packages are built is in [packaging/README.md](packaging/README.md).
+- macos 14 or newer.
+- xcode 16 or newer with swift 6 and command line tools selected. ci selects xcode 16.4 on `macos-15`.
+- an api endpoint and model id, or ollama running locally with a downloaded model.
+- python 3 only if enabling the python execution tool or generating the source bundle.
 
-Optional pieces turn on features when present: `bubblewrap` (sandbox), `python3` and on Debian/Ubuntu `python3-venv`,
-`wl-clipboard` or `xclip` (pasting files and pictures), `xdg-desktop-portal` (file picker), a Secret Service keyring
-(gnome-keyring, KWallet 6, KeePassXC) for API keys, `speech-dispatcher` (system voice). Run
-`md3-agent --check-environment` to see what was found and how to install the rest; Settings → Access shows the same.
+## build and run
 
-## Command line
+from the repository root on macos:
 
-| Flag | |
-|---|---|
-| `--overlay` | Open the quick-question window |
-| `--chat <id>` | Open a chat |
-| `--reminder <id>` | Fire a reminder (used by the systemd timers) |
-| `--check-environment` | Print the optional components found and exit |
-| `--version` | Print the version and exit |
+```bash
+swift package resolve
+swift build -c debug
+swift test --enable-code-coverage
+swift run MD3Agent
+```
 
-A second launch passes its flag to the running window instead of starting another copy.
+open `Package.swift` in xcode, select the `MD3Agent` scheme and `my mac`, then run. this repository uses an spm executable rather than a checked-in xcode project. xcode's package scheme can also be built from the package directory:
 
-## Where things are kept
+```bash
+xcodebuild -list
+xcodebuild -scheme MD3Agent -destination 'platform=macOS' -configuration Debug build
+```
 
-- `$XDG_DATA_HOME/md3-agent` (`~/.local/share/md3-agent`): chats database, attachments, the agent's workspace and venv.
-- `$XDG_CONFIG_HOME/md3-agent` (`~/.config/md3-agent`): settings. API keys and tokens in them are encrypted with a key
-  kept in the desktop keyring, or, without one, in `key` there (readable only by you).
-- `$XDG_STATE_HOME/md3-agent/log.txt`: the log.
-- Reminders that must fire while the app is closed are systemd user timers named `md3-agent-reminder-*`.
-  Without systemd they fire while the app runs, and missed ones show at the next start.
+the `xcodebuild` commands require macos verification; scheme availability is determined by the installed xcode. use `swift build` as the canonical package build.
 
-## Keyboard
+create a locally ad-hoc-signed app bundle:
 
-Enter sends, Shift+Enter starts a new line, Ctrl+V pastes text, files or pictures, Ctrl+N starts a chat, Ctrl+K
-searches, Ctrl+, opens settings, Escape (or the mouse's back button) goes back.
+```bash
+bash scripts/package-macos.sh
+open dist/MD3Agent.app
+```
 
-## Known limits
+the packaging script defaults to arm64 release. set `ARCHITECTURE=x86_64` for intel, `VERSION=1.2.3` for a version, and `SIGNING_IDENTITY` to a developer-id identity for hardened-runtime signing. ad-hoc signing is for local use and does not establish gatekeeper trust.
 
-- The window is drawn through XWayland on Wayland (standard OpenJDK has no native Wayland toolkit yet).
-- x86_64 only for the packages; other architectures build from source.
-- No Flatpak or Snap: their sandbox would take away the System shell and the system Python.
-- The AppImage needs glibc; on musl distributions (Alpine) build from source with a system Java.
+## configure a provider
 
-## Build
+open settings, then model provider. select the protocol, enter the complete endpoint url and exact model id, and set the context/output token limits to values supported by that model. enter the api key and choose `save key in keychain`. the field clears after saving. deleting a saved key removes its generic-password item.
 
-JDK 21 is needed. `./gradlew run` starts the app, `./gradlew :app:test` runs the tests (screens are rendered off-screen
-to `app/build/screens`, nothing opens on the desktop), `packaging/build-dist.sh` builds the runnable folder.
+| protocol | full endpoint example |
+| --- | --- |
+| openai | `https://api.openai.com/v1/chat/completions` |
+| anthropic | `https://api.anthropic.com/v1/messages` |
+| ollama | `http://127.0.0.1:11434/api/chat` |
+| custom | the provider's complete openai-compatible chat-completions url |
 
-## License
+for local ollama, start its server outside the app, download a model using ollama's documented workflow, choose ollama in settings, and enter the installed model's name. leave the api key empty if the local server does not require one. the app does not install or manage ollama.
 
-GPL-3.0, like the Android app it is ported from.
+remote endpoints require https. plaintext http is accepted only for literal loopback hosts. redirects are rejected to prevent credential forwarding. custom headers exist in the configuration model but do not yet have a dedicated settings editor; do not put credentials in custom headers because preferences are not encrypted.
+
+## permissions and security
+
+every tool has an off, ask, or auto policy. all non-shell tools default to ask; shell and python default to off. ask displays the tool name and complete arguments and requires an allow-once decision. settings are locked during a running response so a run uses one consistent policy snapshot.
+
+`run_command` and `run_python` execute as your user. they can access anything your user can access, including files outside the workspace and the network. **the working directory is not a sandbox.** the distribution deliberately disables app sandbox and does not invent a subprocess entitlement. system execution is incompatible with claiming that arbitrary code is isolated by app sandbox.
+
+child processes receive a minimal environment instead of inherited provider secrets. output capture is bounded and the direct child is terminated on cancellation or timeout. descendant process-tree cleanup is not guaranteed. do not use this implementation for hostile code execution.
+
+workspace file tools reject absolute paths, traversal, and resolved symlinks escaping the workspace. these checks are not a race-proof filesystem sandbox against another process mutating paths concurrently. imported attachments currently support utf-8 text only, up to 1 mib per file. attachments are sent to the configured model as part of the prompt.
+
+conversations, memory, tool output, and preferences are stored in `~/Library/Application Support/MD3Agent/agent.sqlite`; imported files and command output files live in its `workspace` directory. the directory is private to your user, but the database is not encrypted. tool run logs can contain sensitive command output. provider credentials are stored separately in keychain.
+
+context pruning removes complete older user turns without splitting assistant tool requests from their results. the token counter uses a conservative utf-8-byte estimate, not a model tokenizer. removed turns remain in the database. model-generated summarization and semantic memory retrieval are not yet ported.
+
+## remaining parity
+
+the original kotlin source remains under `app/` and can still be built with its gradle workflow. the audit and full ledger are in [docs/macos-port.md](docs/macos-port.md).
+
+not yet ported: gemini, key rotation, reasoning signatures and controls, model discovery, semantic embeddings, agent profiles, automatic titles/compaction, edit/regenerate/fork, folders, encrypted phone imports, multimodal attachments, image generation, web/weather tools, charts/diagrams/math, interactive questions, reminders/alarms, notifications, voice, mcp transports/oauth, and single-instance deep-link dispatch. the current native markdown renderer supports inline formatting and fenced code, not the full reference renderer.
+
+macos build, live-provider integration, ui behavior, keychain prompts, global hotkeys, accessibility, signing, and notarization remain unverified. the native target should be considered an incremental implementation, not a production-ready replacement.
+
+## ci and releases
+
+`build-and-test.yml` resolves the package, builds debug and release, runs swift tests with coverage, exports lcov, and packages an ad-hoc-signed application on macos.
+
+`release.yml` runs for `v*` tags. it requires a protected `release` environment and these secrets:
+
+- `MACOS_CERTIFICATE_BASE64`: base64-encoded developer-id application certificate with private key, exported as p12.
+- `MACOS_CERTIFICATE_PASSWORD`: p12 password.
+- `MACOS_KEYCHAIN_PASSWORD`: temporary ci keychain password.
+- `MACOS_SIGNING_IDENTITY`: full developer-id application signing identity.
+- `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`: notarization credentials.
+
+the workflow fails if any secret is absent. it tests, builds, signs, submits to notarization, staples the ticket, checks gatekeeper assessment, and publishes a zip plus sha256 with generated release notes. it has not been executed from this environment. no commits have been pushed and no release has been published.
+
+## verification and complete source
+
+the portable package target can run on linux with swift 6 and sqlite development headers. it excludes the macos network streaming transport, keychain wrapper, agent engine, and interface; passing it is not a macos build result.
+
+```bash
+swift test --jobs 2 --enable-code-coverage
+python3 scripts/export-native-source.py
+```
+
+[docs/native-source.md](docs/native-source.md) contains complete native source, tests, packaging, workflows, and documentation with relative path headers. regenerate it after editing those files.
+
+## license
+
+GPL-3.0. the existing [LICENSE](LICENSE) is preserved.
