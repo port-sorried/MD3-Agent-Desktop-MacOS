@@ -10,3 +10,12 @@ build/
 /pkg/
 /src/
 dist/
+.build/
+.swiftpm/
+.DS_Store
+.env
+.env.*
+*.pem
+*.p12
+*.key
+credentials.json
