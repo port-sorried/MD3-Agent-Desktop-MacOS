@@ -2,7 +2,7 @@
 
 a native swift 6 macos implementation alongside the original kotlin desktop application. the native target uses swiftui, appkit, foundation networking, sqlite, and the security framework. it does not embed a jvm or web renderer.
 
-this migration is **not yet at full functional parity**. the portable core has been compiled and tested on linux. the macos application has not been compiled or run in the implementation environment. do not treat the presence of a release workflow as proof of a working signed release.
+this migration is **not yet at full functional parity**. macos ci has compiled debug and release, run the test suite, packaged the application with its icon, and created the installer disk image. interactive app-control permissions, microphone behavior, and notarized releases have not been verified. do not treat a successful ci build as an interactive acceptance test.
 
 ## native capabilities
 
@@ -119,7 +119,7 @@ the original kotlin source remains under `app/` and can still be built with its 
 
 not yet ported: gemini, key rotation, reasoning signatures and controls, model discovery, semantic embeddings, agent profiles, automatic titles/compaction, edit/regenerate/fork, folders, encrypted phone imports, multimodal attachments, image generation, web/weather tools, charts/diagrams/math, interactive questions, reminders/alarms, notifications, voice, mcp transports/oauth, and single-instance deep-link dispatch. the current native markdown renderer supports inline formatting and fenced code, not the full reference renderer.
 
-macos build, live-provider integration, ui behavior, keychain prompts, global hotkeys, accessibility, signing, and notarization remain unverified. the native target should be considered an incremental implementation, not a production-ready replacement.
+macos debug/release builds, tests, ad-hoc signing, icon generation, and dmg creation passed in [run 39657140833](https://github.com/port-sorried/MD3-Agent-Desktop-MacOS/actions/runs/39657140833) for commit `02b3817`. live-provider integration, ui behavior, keychain prompts, global hotkeys, accessibility interaction, microphone recognition, developer-id signing, and notarization remain unverified. the native target should be considered an incremental implementation, not a production-ready replacement.
 
 ## ci and releases
 

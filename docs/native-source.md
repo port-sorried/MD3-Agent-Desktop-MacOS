@@ -410,7 +410,7 @@ let package = Package(
 
 a native swift 6 macos implementation alongside the original kotlin desktop application. the native target uses swiftui, appkit, foundation networking, sqlite, and the security framework. it does not embed a jvm or web renderer.
 
-this migration is **not yet at full functional parity**. the portable core has been compiled and tested on linux. the macos application has not been compiled or run in the implementation environment. do not treat the presence of a release workflow as proof of a working signed release.
+this migration is **not yet at full functional parity**. macos ci has compiled debug and release, run the test suite, packaged the application with its icon, and created the installer disk image. interactive app-control permissions, microphone behavior, and notarized releases have not been verified. do not treat a successful ci build as an interactive acceptance test.
 
 ## native capabilities
 
@@ -527,7 +527,7 @@ the original kotlin source remains under `app/` and can still be built with its 
 
 not yet ported: gemini, key rotation, reasoning signatures and controls, model discovery, semantic embeddings, agent profiles, automatic titles/compaction, edit/regenerate/fork, folders, encrypted phone imports, multimodal attachments, image generation, web/weather tools, charts/diagrams/math, interactive questions, reminders/alarms, notifications, voice, mcp transports/oauth, and single-instance deep-link dispatch. the current native markdown renderer supports inline formatting and fenced code, not the full reference renderer.
 
-macos build, live-provider integration, ui behavior, keychain prompts, global hotkeys, accessibility, signing, and notarization remain unverified. the native target should be considered an incremental implementation, not a production-ready replacement.
+macos debug/release builds, tests, ad-hoc signing, icon generation, and dmg creation passed in [run 39657140833](https://github.com/port-sorried/MD3-Agent-Desktop-MacOS/actions/runs/39657140833) for commit `02b3817`. live-provider integration, ui behavior, keychain prompts, global hotkeys, accessibility interaction, microphone recognition, developer-id signing, and notarization remain unverified. the native target should be considered an incremental implementation, not a production-ready replacement.
 
 ## ci and releases
 
@@ -3325,6 +3325,12 @@ on 2026-10-21, the official `swift:6.0.3` container compiled the portable packag
 all native sources and tests passed the swift frontend syntax parser before the final documentation edits. `bash -n scripts/package-macos.sh` and python plist parsing passed. no macos framework typecheck, live provider request, github workflow, signing, notarization, or ui test was executed. those are release blockers, not claimed successes.
 
 after adding the macos notch interface, the portable suite passes 26 tests. the notch uses the application's existing approval flow and does not read external agent sessions or install hooks. its geometry uses appkit screen safe-area and auxiliary-area information; the geometry calculation alone is platform-independent so it can be tested without a display. this does not introduce a linux application or linux ui.
+
+### macos verification after system control and voice activation
+
+on 2026-10-21, commit `02b3817` passed native macos ci run `39657140833`: debug build, tests with coverage, release build, coverage export, ad-hoc signed application packaging, icon generation, compressed dmg creation/verification, and installer artifact upload. the portable suite passes 30 tests including legacy settings decoding, whole-word wake-name matching, and mandatory system-tool approval. a swift 6 diagnostic for a legacy mutable accessibility option global was fixed without disabling strict concurrency.
+
+these results supersede earlier statements that the native sources were only syntax-parsed. actual microphone recognition, accessibility permission dialogs and interaction with other apps, live provider integration, and developer-id notarization still require interactive verification on macos. no such runtime acceptance test is claimed.
 ````
 
 ## `scripts/VerifyPortable.swift`

@@ -88,3 +88,9 @@ on 2026-10-21, the official `swift:6.0.3` container compiled the portable packag
 all native sources and tests passed the swift frontend syntax parser before the final documentation edits. `bash -n scripts/package-macos.sh` and python plist parsing passed. no macos framework typecheck, live provider request, github workflow, signing, notarization, or ui test was executed. those are release blockers, not claimed successes.
 
 after adding the macos notch interface, the portable suite passes 26 tests. the notch uses the application's existing approval flow and does not read external agent sessions or install hooks. its geometry uses appkit screen safe-area and auxiliary-area information; the geometry calculation alone is platform-independent so it can be tested without a display. this does not introduce a linux application or linux ui.
+
+### macos verification after system control and voice activation
+
+on 2026-10-21, commit `02b3817` passed native macos ci run `39657140833`: debug build, tests with coverage, release build, coverage export, ad-hoc signed application packaging, icon generation, compressed dmg creation/verification, and installer artifact upload. the portable suite passes 30 tests including legacy settings decoding, whole-word wake-name matching, and mandatory system-tool approval. a swift 6 diagnostic for a legacy mutable accessibility option global was fixed without disabling strict concurrency.
+
+these results supersede earlier statements that the native sources were only syntax-parsed. actual microphone recognition, accessibility permission dialogs and interaction with other apps, live provider integration, and developer-id notarization still require interactive verification on macos. no such runtime acceptance test is claimed.
