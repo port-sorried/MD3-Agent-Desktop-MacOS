@@ -7,6 +7,7 @@ struct MD3AgentApp: App {
     var body: some Scene {
         Window("MD3Agent", id: "main") {
             MainWindowView(model: model)
+                .tint(Theme.primary)
                 .preferredColorScheme(Theme.scheme(model.preferences.appearance))
                 .task { await model.initialize() }
                 .modifier(NotchIntegration(model: model))
@@ -19,7 +20,10 @@ struct MD3AgentApp: App {
                     .keyboardShortcut("n").disabled(model.isRunning)
             }
         }
-        Settings { SettingsView(model: model) }
+        Settings {
+            SettingsView(model: model).tint(Theme.primary)
+                .preferredColorScheme(Theme.scheme(model.preferences.appearance))
+        }
         MenuBarExtra("MD3Agent", systemImage: "sparkles", isInserted: $model.preferences.showMenuBar) {
             MenuBarContent(model: model)
         }

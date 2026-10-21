@@ -94,11 +94,12 @@ struct SettingsView: View {
                 Picker("appearance", selection: $model.preferences.appearance) {
                     Text("system").tag("system"); Text("light").tag("light"); Text("dark").tag("dark")
                 }
-                Text("material color roles follow the macos accent and semantic system colors. reduced motion follows system accessibility settings.")
+                Text("используется исходная палитра material 3: тональные поверхности, синие акценты и светлая/темная тема. уменьшение движения следует системным настройкам.")
                     .foregroundStyle(.secondary)
             }.tabItem { Label("appearance", systemImage: "paintpalette") }
         }
         .formStyle(.grouped).padding().frame(width: 680, height: 610)
+        .background(Theme.surface).foregroundStyle(Theme.onSurface)
         .onAppear { accessibilityGranted = model.systemAutomation.accessibilityGranted }
         .onChange(of: model.preferences) { _, _ in Task { await model.savePreferences() } }
     }

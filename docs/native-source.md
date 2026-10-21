@@ -423,7 +423,7 @@ this migration is **not yet at full functional parity**. macos ci has compiled d
 - native split-view history/chat/inspector layout, lazy chat rows, inline markdown, fenced code copying, text-file attachments, and settings.
 - menu bar controls and a control-option-space global shortcut without accessibility permission.
 - a macos notch task panel with elapsed time, hover details, active-tool status, allow-once/deny controls, and stop/open-chat actions.
-- semantic system colors mapped to material color roles, system accent, light/dark appearance, and reduced-motion-aware scrolling.
+- the original material 3 brand palette, tonal surfaces, rounded conversation cards, capsule controls, light/dark appearance, and reduced-motion-aware scrolling.
 
 the package builds arm64 directly for apple silicon. this removes the java runtime from the native target, but no memory or performance benchmark has been run. intel builds are configurable; the release workflow currently publishes arm64 only.
 
@@ -1903,9 +1903,16 @@ struct ChatTimelineView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     if messages.isEmpty {
-                        ContentUnavailableView("start a conversation", systemImage: "sparkles",
-                                               description: Text("choose your provider and model in settings, then send a message"))
-                            .frame(maxWidth: .infinity).padding(.top, 80)
+                        VStack(spacing: 20) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 44, weight: .light)).foregroundStyle(Theme.onPrimaryContainer)
+                                .frame(width: 100, height: 100)
+                                .background(Theme.primaryContainer, in: RoundedRectangle(cornerRadius: 36))
+                            Text("чем займемся?").font(Theme.title).foregroundStyle(Theme.onSurface)
+                            Text("задай вопрос, прикрепи файл или попроси помочь с задачей")
+                                .font(Theme.body).foregroundStyle(Theme.onSurfaceVariant)
+                                .multilineTextAlignment(.center)
+                        }.frame(maxWidth: .infinity).padding(.top, 100).padding(.bottom, 40)
                     }
                     ForEach(messages) { message in
                         MessageRow(message: message).id(message.id)
@@ -1964,9 +1971,10 @@ private struct MessageRow: View {
                 .font(.caption).padding(10).background(Theme.primaryContainer, in: RoundedRectangle(cornerRadius: 8))
             }
         }
-        .padding(message.role == .user ? 16 : 0)
+        .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(message.role == .user ? Theme.primaryContainer : .clear, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .foregroundStyle(message.role == .user ? Theme.onPrimaryContainer : Theme.onSurface)
+        .background(message.role == .user ? Theme.primaryContainer : Theme.surfaceContainer, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
     }
     private var icon: String {
         switch message.role {
@@ -2016,7 +2024,7 @@ private struct MarkdownContent: View {
                         }.buttonStyle(.plain)
                     }.font(.caption)
                     ScrollView(.horizontal) { Text(block.text).font(Theme.code).textSelection(.enabled) }
-                }.padding(12).background(Theme.surfaceContainer, in: RoundedRectangle(cornerRadius: 10))
+                }.padding(16).background(Theme.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: 16))
             } else {
                 Text((try? AttributedString(markdown: block.text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(block.text))
                     .font(Theme.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
@@ -2089,7 +2097,7 @@ struct InputBarView: View {
     var body: some View {
         VStack(spacing: 10) {
             TextField("message or drop a text file", text: $model.draft, axis: .vertical)
-                .lineLimit(2...10).textFieldStyle(.plain).font(Theme.body)
+                .lineLimit(2...10).textFieldStyle(.plain).font(Theme.body).padding(.horizontal, 4)
                 .onSubmit { model.send() }.disabled(model.isRunning)
                 .accessibilityLabel("message")
             HStack {
@@ -2106,11 +2114,14 @@ struct InputBarView: View {
                     Button { model.stop() } label: { Label("stop", systemImage: "stop.fill") }
                 } else {
                     Button { model.send() } label: { Label("send", systemImage: "arrow.up") }
-                        .buttonStyle(.borderedProminent).disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.storage == nil)
+                        .buttonStyle(MaterialButtonStyle(filled: true)).disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.storage == nil)
                 }
             }
         }
-        .padding(16).background(Theme.surface)
+        .padding(20)
+        .background(Theme.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .overlay { RoundedRectangle(cornerRadius: Theme.cornerRadius).strokeBorder(Theme.outline.opacity(0.15), lineWidth: 1) }
+        .padding(.horizontal, 24).padding(.bottom, 20).padding(.top, 8)
         .fileImporter(isPresented: $importing, allowedContentTypes: [.text, .sourceCode, .json], allowsMultipleSelection: true) { result in
             switch result {
             case .success(let urls): Task { await model.importFiles(urls) }
@@ -2137,6 +2148,7 @@ struct MD3AgentApp: App {
     var body: some Scene {
         Window("MD3Agent", id: "main") {
             MainWindowView(model: model)
+                .tint(Theme.primary)
                 .preferredColorScheme(Theme.scheme(model.preferences.appearance))
                 .task { await model.initialize() }
                 .modifier(NotchIntegration(model: model))
@@ -2149,7 +2161,10 @@ struct MD3AgentApp: App {
                     .keyboardShortcut("n").disabled(model.isRunning)
             }
         }
-        Settings { SettingsView(model: model) }
+        Settings {
+            SettingsView(model: model).tint(Theme.primary)
+                .preferredColorScheme(Theme.scheme(model.preferences.appearance))
+        }
         MenuBarExtra("MD3Agent", systemImage: "sparkles", isInserted: $model.preferences.showMenuBar) {
             MenuBarContent(model: model)
         }
@@ -2182,18 +2197,28 @@ import AgentCore
 struct MainWindowView: View {
     @Bindable var model: AppModel
     @State private var search = ""
-    @State private var showInspector = true
+    @State private var showInspector = false
     @State private var hotkey = HotkeyManager()
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         NavigationSplitView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 10) {
+                    Image(systemName: "sparkles").font(.title2).foregroundStyle(Theme.primary)
+                    Text("MD3Agent").font(.system(size: 22, weight: .semibold, design: .rounded))
+                }.padding(.horizontal, 20).padding(.top, 20)
+                Button { model.newConversation() } label: {
+                    Label("новый разговор", systemImage: "plus").frame(maxWidth: .infinity)
+                }.buttonStyle(MaterialButtonStyle()).padding(.horizontal, 16).disabled(model.isRunning)
             List(selection: $model.selectedID) {
                 ForEach(model.conversations.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { conversation in
-                    Label(conversation.title, systemImage: "bubble.left.and.bubble.right")
-                        .lineLimit(2).tag(conversation.id)
+                    Label(conversation.title, systemImage: "bubble.left")
+                        .font(.system(size: 14)).lineLimit(2).padding(.vertical, 9).tag(conversation.id)
+                        .listRowBackground(model.selectedID == conversation.id ? Theme.secondaryContainer : Color.clear)
                 }
             }
+            .scrollContentBackground(.hidden)
             .disabled(model.isRunning)
             .navigationTitle("conversations")
             .searchable(text: $search, prompt: "search titles")
@@ -2204,6 +2229,7 @@ struct MainWindowView: View {
                 Button(role: .destructive) { Task { await model.deleteSelected() } } label: { Image(systemName: "trash") }
                     .help("delete conversation").disabled(model.isRunning || model.selectedID == nil)
             }
+            }.background(Theme.surfaceContainer).foregroundStyle(Theme.onSurface)
         } detail: {
             VStack(spacing: 0) {
                 if let error = model.errorMessage {
@@ -2224,13 +2250,13 @@ struct MainWindowView: View {
                             Text("approval applies to this invocation only").foregroundStyle(.secondary)
                             Spacer()
                             Button("deny") { model.resolveApproval(false) }
-                            Button("allow once") { model.resolveApproval(true) }.buttonStyle(.borderedProminent)
+                            Button("allow once") { model.resolveApproval(true) }.buttonStyle(MaterialButtonStyle(filled: true))
                         }
-                    }.padding().background(Theme.primaryContainer)
+                    }.padding(20).background(Theme.primaryContainer, in: RoundedRectangle(cornerRadius: 24)).padding(16)
                 }
-                Divider()
                 InputBarView(model: model)
             }
+            .background(Theme.surface).foregroundStyle(Theme.onSurface)
             .navigationTitle(model.selectedConversation?.title ?? "MD3Agent")
             .toolbar {
                 if model.isRunning { ProgressView().controlSize(.small) }
@@ -2576,11 +2602,12 @@ struct SettingsView: View {
                 Picker("appearance", selection: $model.preferences.appearance) {
                     Text("system").tag("system"); Text("light").tag("light"); Text("dark").tag("dark")
                 }
-                Text("material color roles follow the macos accent and semantic system colors. reduced motion follows system accessibility settings.")
+                Text("используется исходная палитра material 3: тональные поверхности, синие акценты и светлая/темная тема. уменьшение движения следует системным настройкам.")
                     .foregroundStyle(.secondary)
             }.tabItem { Label("appearance", systemImage: "paintpalette") }
         }
         .formStyle(.grouped).padding().frame(width: 680, height: 610)
+        .background(Theme.surface).foregroundStyle(Theme.onSurface)
         .onAppear { accessibilityGranted = model.systemAutomation.accessibilityGranted }
         .onChange(of: model.preferences) { _, _ in Task { await model.savePreferences() } }
     }
@@ -2734,22 +2761,50 @@ import SwiftUI
 import AppKit
 
 enum Theme {
-    static let primary = Color.accentColor
-    static let onPrimary = Color.white
-    static let surface = Color(nsColor: .windowBackgroundColor)
-    static let surfaceContainer = Color(nsColor: .controlBackgroundColor)
-    static let onSurface = Color(nsColor: .labelColor)
-    static let onSurfaceVariant = Color(nsColor: .secondaryLabelColor)
-    static let outline = Color(nsColor: .separatorColor)
+    // BrandColors.kt is the source of truth for the Material 3 brand palette.
+    static let primary = adaptive(light: 0x455D93, dark: 0xB0C6FF)
+    static let onPrimary = adaptive(light: 0xFFFFFF, dark: 0x152E60)
+    static let surface = adaptive(light: 0xFAF8FF, dark: 0x121318)
+    static let surfaceContainer = adaptive(light: 0xEEEDF4, dark: 0x1E1F25)
+    static let surfaceContainerHigh = adaptive(light: 0xE8E7EF, dark: 0x282A2F)
+    static let surfaceContainerHighest = adaptive(light: 0xE2E2E9, dark: 0x33353A)
+    static let onSurface = adaptive(light: 0x1A1B20, dark: 0xE3E2E9)
+    static let onSurfaceVariant = adaptive(light: 0x44474F, dark: 0xC4C6D0)
+    static let outline = adaptive(light: 0x74777F, dark: 0x8E9099)
     static let error = Color(nsColor: .systemRed)
-    static let primaryContainer = Color.accentColor.opacity(0.12)
-    static let cornerRadius: CGFloat = 14
-    static let body = Font.system(size: 14)
-    static let title = Font.system(size: 22, weight: .semibold, design: .rounded)
+    static let primaryContainer = adaptive(light: 0xD9E2FF, dark: 0x2D4578)
+    static let onPrimaryContainer = adaptive(light: 0x2D4578, dark: 0xD9E2FF)
+    static let secondaryContainer = adaptive(light: 0xDBE2F9, dark: 0x3F4759)
+    static let cornerRadius: CGFloat = 28
+    static let body = Font.system(size: 15)
+    static let title = Font.system(size: 28, weight: .medium, design: .rounded)
     static let code = Font.system(size: 12, design: .monospaced)
 
     static func scheme(_ preference: String) -> ColorScheme? {
         switch preference { case "light": .light; case "dark": .dark; default: nil }
+    }
+
+    private static func adaptive(light: UInt32, dark: UInt32) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let hex = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+            return NSColor(srgbRed: CGFloat((hex >> 16) & 255) / 255,
+                           green: CGFloat((hex >> 8) & 255) / 255,
+                           blue: CGFloat(hex & 255) / 255, alpha: 1)
+        })
+    }
+}
+
+struct MaterialButtonStyle: ButtonStyle {
+    var filled = false
+    @Environment(\.isEnabled) private var enabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .semibold))
+            .padding(.horizontal, 18).padding(.vertical, 12)
+            .foregroundStyle(filled ? Theme.onPrimary : Theme.onPrimaryContainer)
+            .background(filled ? Theme.primary : Theme.secondaryContainer, in: Capsule())
+            .opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.4)
+            .contentShape(Capsule())
     }
 }
 ````

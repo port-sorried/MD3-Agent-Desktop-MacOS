@@ -15,7 +15,7 @@ this migration is **not yet at full functional parity**. macos ci has compiled d
 - native split-view history/chat/inspector layout, lazy chat rows, inline markdown, fenced code copying, text-file attachments, and settings.
 - menu bar controls and a control-option-space global shortcut without accessibility permission.
 - a macos notch task panel with elapsed time, hover details, active-tool status, allow-once/deny controls, and stop/open-chat actions.
-- semantic system colors mapped to material color roles, system accent, light/dark appearance, and reduced-motion-aware scrolling.
+- the original material 3 brand palette, tonal surfaces, rounded conversation cards, capsule controls, light/dark appearance, and reduced-motion-aware scrolling.
 
 the package builds arm64 directly for apple silicon. this removes the java runtime from the native target, but no memory or performance benchmark has been run. intel builds are configurable; the release workflow currently publishes arm64 only.
 

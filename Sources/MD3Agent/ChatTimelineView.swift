@@ -13,9 +13,16 @@ struct ChatTimelineView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     if messages.isEmpty {
-                        ContentUnavailableView("start a conversation", systemImage: "sparkles",
-                                               description: Text("choose your provider and model in settings, then send a message"))
-                            .frame(maxWidth: .infinity).padding(.top, 80)
+                        VStack(spacing: 20) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 44, weight: .light)).foregroundStyle(Theme.onPrimaryContainer)
+                                .frame(width: 100, height: 100)
+                                .background(Theme.primaryContainer, in: RoundedRectangle(cornerRadius: 36))
+                            Text("чем займемся?").font(Theme.title).foregroundStyle(Theme.onSurface)
+                            Text("задай вопрос, прикрепи файл или попроси помочь с задачей")
+                                .font(Theme.body).foregroundStyle(Theme.onSurfaceVariant)
+                                .multilineTextAlignment(.center)
+                        }.frame(maxWidth: .infinity).padding(.top, 100).padding(.bottom, 40)
                     }
                     ForEach(messages) { message in
                         MessageRow(message: message).id(message.id)
@@ -74,9 +81,10 @@ private struct MessageRow: View {
                 .font(.caption).padding(10).background(Theme.primaryContainer, in: RoundedRectangle(cornerRadius: 8))
             }
         }
-        .padding(message.role == .user ? 16 : 0)
+        .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(message.role == .user ? Theme.primaryContainer : .clear, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .foregroundStyle(message.role == .user ? Theme.onPrimaryContainer : Theme.onSurface)
+        .background(message.role == .user ? Theme.primaryContainer : Theme.surfaceContainer, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
     }
     private var icon: String {
         switch message.role {
@@ -126,7 +134,7 @@ private struct MarkdownContent: View {
                         }.buttonStyle(.plain)
                     }.font(.caption)
                     ScrollView(.horizontal) { Text(block.text).font(Theme.code).textSelection(.enabled) }
-                }.padding(12).background(Theme.surfaceContainer, in: RoundedRectangle(cornerRadius: 10))
+                }.padding(16).background(Theme.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: 16))
             } else {
                 Text((try? AttributedString(markdown: block.text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(block.text))
                     .font(Theme.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)

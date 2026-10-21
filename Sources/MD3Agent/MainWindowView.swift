@@ -5,18 +5,28 @@ import AgentCore
 struct MainWindowView: View {
     @Bindable var model: AppModel
     @State private var search = ""
-    @State private var showInspector = true
+    @State private var showInspector = false
     @State private var hotkey = HotkeyManager()
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         NavigationSplitView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 10) {
+                    Image(systemName: "sparkles").font(.title2).foregroundStyle(Theme.primary)
+                    Text("MD3Agent").font(.system(size: 22, weight: .semibold, design: .rounded))
+                }.padding(.horizontal, 20).padding(.top, 20)
+                Button { model.newConversation() } label: {
+                    Label("новый разговор", systemImage: "plus").frame(maxWidth: .infinity)
+                }.buttonStyle(MaterialButtonStyle()).padding(.horizontal, 16).disabled(model.isRunning)
             List(selection: $model.selectedID) {
                 ForEach(model.conversations.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { conversation in
-                    Label(conversation.title, systemImage: "bubble.left.and.bubble.right")
-                        .lineLimit(2).tag(conversation.id)
+                    Label(conversation.title, systemImage: "bubble.left")
+                        .font(.system(size: 14)).lineLimit(2).padding(.vertical, 9).tag(conversation.id)
+                        .listRowBackground(model.selectedID == conversation.id ? Theme.secondaryContainer : Color.clear)
                 }
             }
+            .scrollContentBackground(.hidden)
             .disabled(model.isRunning)
             .navigationTitle("conversations")
             .searchable(text: $search, prompt: "search titles")
@@ -27,6 +37,7 @@ struct MainWindowView: View {
                 Button(role: .destructive) { Task { await model.deleteSelected() } } label: { Image(systemName: "trash") }
                     .help("delete conversation").disabled(model.isRunning || model.selectedID == nil)
             }
+            }.background(Theme.surfaceContainer).foregroundStyle(Theme.onSurface)
         } detail: {
             VStack(spacing: 0) {
                 if let error = model.errorMessage {
@@ -47,13 +58,13 @@ struct MainWindowView: View {
                             Text("approval applies to this invocation only").foregroundStyle(.secondary)
                             Spacer()
                             Button("deny") { model.resolveApproval(false) }
-                            Button("allow once") { model.resolveApproval(true) }.buttonStyle(.borderedProminent)
+                            Button("allow once") { model.resolveApproval(true) }.buttonStyle(MaterialButtonStyle(filled: true))
                         }
-                    }.padding().background(Theme.primaryContainer)
+                    }.padding(20).background(Theme.primaryContainer, in: RoundedRectangle(cornerRadius: 24)).padding(16)
                 }
-                Divider()
                 InputBarView(model: model)
             }
+            .background(Theme.surface).foregroundStyle(Theme.onSurface)
             .navigationTitle(model.selectedConversation?.title ?? "MD3Agent")
             .toolbar {
                 if model.isRunning { ProgressView().controlSize(.small) }

@@ -8,7 +8,7 @@ struct InputBarView: View {
     var body: some View {
         VStack(spacing: 10) {
             TextField("message or drop a text file", text: $model.draft, axis: .vertical)
-                .lineLimit(2...10).textFieldStyle(.plain).font(Theme.body)
+                .lineLimit(2...10).textFieldStyle(.plain).font(Theme.body).padding(.horizontal, 4)
                 .onSubmit { model.send() }.disabled(model.isRunning)
                 .accessibilityLabel("message")
             HStack {
@@ -25,11 +25,14 @@ struct InputBarView: View {
                     Button { model.stop() } label: { Label("stop", systemImage: "stop.fill") }
                 } else {
                     Button { model.send() } label: { Label("send", systemImage: "arrow.up") }
-                        .buttonStyle(.borderedProminent).disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.storage == nil)
+                        .buttonStyle(MaterialButtonStyle(filled: true)).disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.storage == nil)
                 }
             }
         }
-        .padding(16).background(Theme.surface)
+        .padding(20)
+        .background(Theme.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+        .overlay { RoundedRectangle(cornerRadius: Theme.cornerRadius).strokeBorder(Theme.outline.opacity(0.15), lineWidth: 1) }
+        .padding(.horizontal, 24).padding(.bottom, 20).padding(.top, 8)
         .fileImporter(isPresented: $importing, allowedContentTypes: [.text, .sourceCode, .json], allowsMultipleSelection: true) { result in
             switch result {
             case .success(let urls): Task { await model.importFiles(urls) }
